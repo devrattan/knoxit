@@ -5,14 +5,3 @@ coverage/
 .env
 .env.local
 *.log
-
-# Local OS/editor files
-.DS_Store
-Thumbs.db
-.vscode/
-.idea/
-
-# Generated handoff/archive bundles
-archive/
-*.zip
-knoxit-full-app-preview.jsx

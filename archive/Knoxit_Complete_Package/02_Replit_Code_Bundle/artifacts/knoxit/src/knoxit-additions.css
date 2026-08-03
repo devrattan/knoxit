@@ -1,0 +1,17 @@
+/* artifacts/knoxit/src/knoxit-additions.css
+   Add these to your existing global CSS file (wherever Tailwind's base
+   styles are imported) — don't create a new stylesheet, append to what's
+   already there so it's all loaded together. */
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+@keyframes chipFloat {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-4px); }
+}
