@@ -24,7 +24,7 @@ export default {
         card: "0.875rem"
       },
       boxShadow: {
-        glow: "0 0 28px rgba(52, 211, 153, 0.14)"
+        glow: "0 0 28px var(--theme-glow)"
       },
       zIndex: {
         drawer: "50",

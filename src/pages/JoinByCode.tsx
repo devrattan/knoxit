@@ -36,8 +36,8 @@ export default function JoinByCode() {
       <SubHeader title="Join with Code" onBack={() => window.history.back()} />
       <div className="flex-1 flex flex-col px-4 pt-6">
         <div className="flex flex-col items-center mb-6">
-          <div className="w-14 h-14 rounded-full bg-violet-500/15 border border-violet-500/30 flex items-center justify-center mb-3">
-            <KeyRound size={24} className="text-violet-300" />
+          <div className="w-14 h-14 rounded-full bg-[var(--theme-primary-soft)] border border-[var(--theme-primary-border)] flex items-center justify-center mb-3">
+            <KeyRound size={24} className="text-[var(--theme-primary)]" />
           </div>
           <div className="text-white text-[15px] font-semibold text-center">Got an invite code?</div>
           <div className="text-zinc-500 text-[11px] text-center mt-1 max-w-[240px]">
@@ -53,7 +53,7 @@ export default function JoinByCode() {
           }}
           placeholder="e.g. GULLY7"
           maxLength={12}
-          className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-4 py-3 text-center text-white text-[16px] font-bold tracking-[0.2em] placeholder:text-zinc-600 placeholder:tracking-normal placeholder:font-normal focus:outline-none focus:border-violet-500/50"
+          className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-4 py-3 text-center text-white text-[16px] font-bold tracking-[0.2em] placeholder:text-zinc-600 placeholder:tracking-normal placeholder:font-normal focus:outline-none focus:border-[var(--theme-primary-ring)]"
         />
 
         {state === "error" && (
@@ -70,7 +70,7 @@ export default function JoinByCode() {
         <button
           onClick={submit}
           disabled={normalizeInviteCode(code).length < 4 || isLoading}
-          className="w-full mt-4 bg-violet-500 disabled:bg-white/5 disabled:text-zinc-600 text-black font-bold text-[13px] rounded-xl py-3"
+          className="w-full mt-4 bg-[var(--theme-primary)] disabled:bg-white/5 disabled:text-zinc-600 text-[var(--theme-primary-text)] font-bold text-[13px] rounded-xl py-3"
         >
           {isLoading ? "Joining..." : "Join League"}
         </button>

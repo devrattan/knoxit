@@ -38,6 +38,8 @@ Vercel settings:
 
 Public invite links are supported at `/join/CODE` and `/join?code=CODE`.
 
+Users can change the app accent from the drawer's Colour Code picker. Presets and custom `#RRGGBB` values are saved locally in the browser.
+
 ## Important Files
 
 - `src/app/router.tsx` - application routes and protected-route wiring.

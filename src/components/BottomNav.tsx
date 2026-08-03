@@ -23,8 +23,8 @@ export function BottomNav() {
             onClick={() => setLocation(item.path)}
             className="flex-1 flex flex-col items-center gap-0.5"
           >
-            <item.icon size={19} className={active ? "text-emerald-400" : "text-zinc-500"} />
-            <span className={`text-[9px] ${active ? "text-emerald-400 font-semibold" : "text-zinc-500"}`}>
+            <item.icon size={19} className={active ? "text-[var(--theme-primary)]" : "text-zinc-500"} />
+            <span className={`text-[9px] ${active ? "text-[var(--theme-primary)] font-semibold" : "text-zinc-500"}`}>
               {item.label}
             </span>
           </button>

@@ -4,6 +4,7 @@ import {
   X, User, Bell, Gift, Users, HelpCircle, MessageCircleQuestion, LifeBuoy,
   FileText, Shield, Info, LogOut, ChevronRight,
 } from "lucide-react";
+import { ThemePicker } from "./ThemePicker";
 
 type DrawerProps = { open: boolean; onClose: () => void };
 
@@ -69,7 +70,7 @@ export function Drawer({ open, onClose }: DrawerProps) {
         </div>
 
         <div className="flex items-center gap-3 px-4 py-3 border-y border-white/5 mb-2">
-          <div className="w-10 h-10 rounded-full bg-emerald-500/20 border border-emerald-400/40 flex items-center justify-center text-emerald-300 text-[12px] font-bold">
+          <div className="w-10 h-10 rounded-full bg-[var(--theme-primary-soft)] border border-[var(--theme-primary-border)] flex items-center justify-center text-[var(--theme-primary)] text-[12px] font-bold">
             YO
           </div>
           <div>
@@ -77,6 +78,8 @@ export function Drawer({ open, onClose }: DrawerProps) {
             <div className="text-zinc-500 text-[10px]">View profile</div>
           </div>
         </div>
+
+        <ThemePicker />
 
         {sections.map((section) => (
           <div key={section.label} className="px-2 mb-2">

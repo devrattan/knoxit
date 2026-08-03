@@ -51,7 +51,7 @@ export default function PublicJoin({ params }: PublicJoinProps) {
         <Link href="/" className="text-[18px] font-extrabold tracking-wide text-white">
           KNOXIT
         </Link>
-        <Link href={loginHref} className="flex items-center gap-1.5 text-[12px] font-bold text-emerald-400">
+        <Link href={loginHref} className="flex items-center gap-1.5 text-[12px] font-bold text-[var(--theme-primary)]">
           <LogIn size={14} /> Log in
         </Link>
       </header>
@@ -59,8 +59,8 @@ export default function PublicJoin({ params }: PublicJoinProps) {
       <main className="flex flex-1 items-center justify-center py-8">
         <section className="w-full max-w-md rounded-2xl border border-white/10 bg-white/[0.03] p-5 shadow-glow">
           <div className="mb-5 flex flex-col items-center text-center">
-            <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-emerald-500/30 bg-emerald-500/15">
-              <Trophy size={28} className="text-emerald-400" />
+            <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-[var(--theme-primary-border)] bg-[var(--theme-primary-soft)]">
+              <Trophy size={28} className="text-[var(--theme-primary)]" />
             </div>
             <h1 className="text-[24px] font-extrabold leading-tight text-white">Join a Knoxit league</h1>
             <p className="mt-2 max-w-[310px] text-[13px] leading-5 text-zinc-400">
@@ -70,7 +70,7 @@ export default function PublicJoin({ params }: PublicJoinProps) {
 
           <label className="mb-1.5 block text-[11px] font-bold tracking-wide text-zinc-400">INVITE CODE</label>
           <div className="relative">
-            <KeyRound size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-violet-300" />
+            <KeyRound size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--theme-primary)]" />
             <input
               value={code}
               onChange={(event) => {
@@ -79,7 +79,7 @@ export default function PublicJoin({ params }: PublicJoinProps) {
               }}
               placeholder="GULLY7"
               maxLength={12}
-              className="w-full rounded-xl border border-white/10 bg-zinc-950 py-3 pl-10 pr-3 text-center text-[17px] font-extrabold tracking-[0.22em] text-white placeholder:text-zinc-600 placeholder:tracking-normal focus:border-emerald-500/60 focus:outline-none"
+              className="w-full rounded-xl border border-white/10 bg-zinc-950 py-3 pl-10 pr-3 text-center text-[17px] font-extrabold tracking-[0.22em] text-white placeholder:text-zinc-600 placeholder:tracking-normal focus:border-[var(--theme-primary-ring)] focus:outline-none"
             />
           </div>
 
@@ -89,7 +89,7 @@ export default function PublicJoin({ params }: PublicJoinProps) {
             </div>
           )}
           {state === "success" && (
-            <div className="mt-3 flex items-center justify-center gap-2 rounded-lg border border-emerald-500/25 bg-emerald-500/10 px-3 py-2 text-center text-[12px] text-emerald-300">
+            <div className="mt-3 flex items-center justify-center gap-2 rounded-lg border border-[var(--theme-primary-border)] bg-[var(--theme-primary-soft)] px-3 py-2 text-center text-[12px] text-[var(--theme-primary)]">
               <Check size={14} /> {message}
             </div>
           )}
@@ -97,7 +97,7 @@ export default function PublicJoin({ params }: PublicJoinProps) {
           <button
             onClick={submit}
             disabled={normalizeInviteCode(code).length < 4 || isLoading}
-            className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 py-3 text-[13px] font-extrabold text-black disabled:bg-white/5 disabled:text-zinc-600"
+            className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--theme-primary)] py-3 text-[13px] font-extrabold text-[var(--theme-primary-text)] disabled:bg-white/5 disabled:text-zinc-600"
           >
             <Users size={16} /> {isLoading ? "Joining..." : "Join League"}
           </button>
