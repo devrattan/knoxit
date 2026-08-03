@@ -22,6 +22,20 @@ npm run build
 
 `npm run typecheck:server` is available separately for the copied Express/Drizzle route bundle. It currently reports Drizzle write-type mismatches from the supplied handoff code; see `docs/Architecture_Audit.md`.
 
+## Free Deploy
+
+Recommended path: push this repo to GitHub, then import it into Vercel.
+
+Vercel settings:
+
+- Framework preset: `Vite`
+- Build command: `npm run build`
+- Output directory: `dist`
+- Environment variables for demo/static mode:
+  - `VITE_USE_MOCK_API=true`
+
+`vercel.json` includes an SPA rewrite so protected and nested routes keep working when users refresh a page.
+
 ## Important Files
 
 - `src/app/router.tsx` - application routes and protected-route wiring.
