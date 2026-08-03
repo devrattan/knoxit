@@ -21,6 +21,7 @@ import OpponentProfile from "../pages/OpponentProfile";
 import ExploreLeagues from "../pages/ExploreLeagues";
 import { FriendsLeagueRequestDetail, PublicFriendsLeaguesList } from "../pages/FriendsLeagues";
 import JoinByCode from "../pages/JoinByCode";
+import PublicJoin from "../pages/PublicJoin";
 import CreateFriendsLeague from "../pages/CreateFriendsLeague";
 import ManageAdmins from "../pages/ManageAdmins";
 import ManageRequests from "../pages/ManageRequests";
@@ -32,6 +33,8 @@ export function AppRouter() {
         <Route path="/login" component={Login} />
         <Route path="/signup" component={Signup} />
         <Route path="/forgot-password" component={ForgotPassword} />
+        <Route path="/join/:inviteCode" component={PublicJoin} />
+        <Route path="/join" component={PublicJoin} />
         <ProtectedRoute path="/" component={Home} />
         <ProtectedRoute path="/my-leagues" component={MyLeagues} />
         <ProtectedRoute path="/picks" component={Picks} />

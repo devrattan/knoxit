@@ -36,6 +36,8 @@ Vercel settings:
 
 `vercel.json` includes an SPA rewrite so protected and nested routes keep working when users refresh a page.
 
+Public invite links are supported at `/join/CODE` and `/join?code=CODE`.
+
 ## Important Files
 
 - `src/app/router.tsx` - application routes and protected-route wiring.

@@ -1,4 +1,3 @@
-// artifacts/knoxit/src/pages/JoinByCode.tsx
 // Route: /friends-leagues/join-by-code
 import { useState } from "react";
 import { useLocation } from "wouter";
@@ -6,16 +5,20 @@ import { KeyRound } from "lucide-react";
 import { SubHeader } from "../components/Header";
 import { useJoinByCodeMutation } from "../services/api/knoxitApi";
 
+function normalizeInviteCode(value: string) {
+  return value.replace(/[^a-zA-Z0-9]/g, "").toUpperCase().slice(0, 12);
+}
+
 export default function JoinByCode() {
   const [, setLocation] = useLocation();
   const [joinByCode, { isLoading }] = useJoinByCodeMutation();
-  const [code, setCode] = useState("");
+  const [code, setCode] = useState(() => normalizeInviteCode(new URLSearchParams(window.location.search).get("code") ?? ""));
   const [state, setState] = useState<"idle" | "success" | "error">("idle");
   const [message, setMessage] = useState("");
 
   const submit = async () => {
     try {
-      const result = await joinByCode({ inviteCode: code.trim().toUpperCase() }).unwrap();
+      const result = await joinByCode({ inviteCode: normalizeInviteCode(code) }).unwrap();
       const leagueId = result.leagueId ?? result.league?.id ?? result.id;
       const leagueName = result.league?.name ?? result.name;
 
@@ -38,14 +41,14 @@ export default function JoinByCode() {
           </div>
           <div className="text-white text-[15px] font-semibold text-center">Got an invite code?</div>
           <div className="text-zinc-500 text-[11px] text-center mt-1 max-w-[240px]">
-            Enter the code your friend shared to join their league instantly — no approval needed.
+            Enter the code your friend shared to join their league instantly, no approval needed.
           </div>
         </div>
 
         <input
           value={code}
           onChange={(e) => {
-            setCode(e.target.value.toUpperCase());
+            setCode(normalizeInviteCode(e.target.value));
             setState("idle");
           }}
           placeholder="e.g. GULLY7"
@@ -66,7 +69,7 @@ export default function JoinByCode() {
 
         <button
           onClick={submit}
-          disabled={code.trim().length < 4 || isLoading}
+          disabled={normalizeInviteCode(code).length < 4 || isLoading}
           className="w-full mt-4 bg-violet-500 disabled:bg-white/5 disabled:text-zinc-600 text-black font-bold text-[13px] rounded-xl py-3"
         >
           {isLoading ? "Joining..." : "Join League"}

@@ -1,4 +1,3 @@
-// artifacts/knoxit/src/pages/CreateFriendsLeague.tsx
 // Route: /friends-leagues/create
 import { useState } from "react";
 import { useLocation } from "wouter";
@@ -8,9 +7,8 @@ import { publicFriendsLeagues } from "../services/mockData";
 
 function generateCodeLocally() {
   // TODO: this is a client-side stand-in for demo purposes only. The real
-  // code comes from the server response of POST /api/leagues (see
-  // generateUniqueInviteCode() in leagues.ts) — never trust a client-
-  // generated code as the actual invite code once the backend is wired up.
+  // code comes from the server response of POST /api/leagues. Never trust a
+  // client-generated code as the actual invite code once the backend is wired up.
   const ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
   let code = "";
   for (let i = 0; i < 6; i++) code += ALPHABET[Math.floor(Math.random() * ALPHABET.length)];
@@ -28,6 +26,8 @@ export default function CreateFriendsLeague() {
   const [created, setCreated] = useState<{ name: string; inviteCode: string } | null>(null);
   const [copied, setCopied] = useState(false);
 
+  const inviteLink = created ? `${window.location.origin}/join/${created.inviteCode}` : "";
+
   const submit = () => {
     setNameError(null);
 
@@ -36,11 +36,8 @@ export default function CreateFriendsLeague() {
       return;
     }
 
-    // TODO: replace with POST /api/leagues — the real endpoint does this
-    // same uniqueness check server-side (case-insensitive, friends leagues
-    // only) and returns 409 with a friendly message if the name's taken.
-    // No entryFeeChips or maxMembers sent — Friends Leagues have neither
-    // (25 Jul 2026 decision): no entry fee, no member cap, no vault.
+    // TODO: replace with POST /api/leagues. The real endpoint does this same
+    // uniqueness check server-side and returns 409 if the name is taken.
     const clash = publicFriendsLeagues.some((f) => f.name.toLowerCase() === name.trim().toLowerCase());
     if (clash) {
       setNameError("A friends league with this name already exists. Try a different name.");
@@ -50,9 +47,9 @@ export default function CreateFriendsLeague() {
     setCreated({ name: name.trim(), inviteCode: generateCodeLocally() });
   };
 
-  const copyCode = () => {
+  const copyInviteLink = () => {
     if (!created) return;
-    navigator.clipboard?.writeText(created.inviteCode);
+    navigator.clipboard?.writeText(inviteLink);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   };
@@ -67,17 +64,21 @@ export default function CreateFriendsLeague() {
           </div>
           <div className="text-white text-[17px] font-bold mb-1">{created.name} is live!</div>
           <div className="text-zinc-500 text-[12px] mb-6 max-w-[260px]">
-            Share the code below with friends — entering it joins them instantly, no approval needed.
+            Share this invite link with friends. Opening it lets them join instantly, no approval needed.
           </div>
 
           <div className="w-full bg-violet-500/[0.06] border border-violet-500/25 rounded-2xl p-4 mb-3">
             <div className="text-violet-300 text-[10px] font-bold mb-2 tracking-wide">INVITE CODE</div>
-            <div className="flex items-center justify-between">
-              <span className="text-white text-[26px] font-extrabold tracking-[0.25em]">{created.inviteCode}</span>
-              <button onClick={copyCode} className="flex items-center gap-1 text-[11px] font-semibold text-violet-300 bg-violet-500/15 border border-violet-500/30 rounded-lg px-2.5 py-1.5">
-                <Copy size={12} /> {copied ? "Copied" : "Copy"}
-              </button>
+            <div className="text-white text-[26px] font-extrabold tracking-[0.25em]">{created.inviteCode}</div>
+            <div className="mt-3 rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-left text-[11px] text-zinc-400 break-all">
+              {inviteLink}
             </div>
+            <button
+              onClick={copyInviteLink}
+              className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-violet-500/30 bg-violet-500/15 px-2.5 py-2 text-[11px] font-semibold text-violet-300"
+            >
+              <Copy size={12} /> {copied ? "Link copied" : "Copy invite link"}
+            </button>
           </div>
 
           <button
@@ -98,13 +99,16 @@ export default function CreateFriendsLeague() {
         <label className="block text-[11px] font-semibold text-zinc-400 mb-1.5">LEAGUE NAME</label>
         <input
           value={name}
-          onChange={(e) => { setName(e.target.value); setNameError(null); }}
+          onChange={(e) => {
+            setName(e.target.value);
+            setNameError(null);
+          }}
           placeholder="e.g. Weekend Warriors"
           maxLength={60}
           className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3 py-2.5 text-white text-[14px] placeholder:text-zinc-600 focus:outline-none focus:border-emerald-500/50 mb-1"
         />
         {nameError && <div className="text-red-400 text-[11px] mb-2">{nameError}</div>}
-        <div className="text-zinc-600 text-[10px] mb-4">Must be unique — no two public friends leagues can share a name.</div>
+        <div className="text-zinc-600 text-[10px] mb-4">Must be unique. No two public friends leagues can share a name.</div>
 
         <label className="flex items-center gap-1.5 text-[11px] font-semibold text-zinc-400 mb-1.5">
           <MessageSquareText size={12} /> ENTRY TERMS <span className="text-zinc-600 font-normal">(optional)</span>
@@ -112,13 +116,13 @@ export default function CreateFriendsLeague() {
         <textarea
           value={entryTerms}
           onChange={(e) => setEntryTerms(e.target.value)}
-          placeholder="e.g. ₹500 each, winner takes the pot, settled via UPI within the group"
+          placeholder="e.g. 500 each, winner takes the pot, settled via UPI within the group"
           maxLength={500}
           rows={3}
           className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3 py-2.5 text-white text-[13px] placeholder:text-zinc-600 focus:outline-none focus:border-emerald-500/50 resize-none mb-1"
         />
         <div className="text-zinc-600 text-[10px] mb-4">
-          Write this yourselves if there's any arrangement — Knoxit only displays it, never sets, collects, or processes anything. There's no entry fee or member limit here; anyone with the code or an approved request can join.
+          Write this yourselves if there is any arrangement. Knoxit only displays it, never sets, collects, or processes anything. There is no entry fee or member limit here; anyone with the code or an approved request can join.
         </div>
 
         <label className="block text-[11px] font-semibold text-zinc-400 mb-2">VISIBILITY</label>

@@ -3,6 +3,7 @@ import { AuthLayout } from "./AuthLayout";
 
 export default function Login() {
   const [, setLocation] = useLocation();
+  const redirect = new URLSearchParams(window.location.search).get("redirect") || "/";
 
   return (
     <AuthLayout title="Log in">
@@ -10,7 +11,7 @@ export default function Login() {
         className="space-y-4"
         onSubmit={(event) => {
           event.preventDefault();
-          setLocation("/");
+          setLocation(redirect);
         }}
       >
         <label className="block text-sm text-zinc-300">
