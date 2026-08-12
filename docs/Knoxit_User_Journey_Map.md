@@ -225,7 +225,7 @@ This is what a DB architect needs: which screens actually read/write which table
 | `picks` | Primary/backup team per user per league per gameweek, result |
 | `join_requests` | Friends League join requests + optional message |
 | `split_votes` / `split_vote_responses` | Vault split proposal + per-member vote |
-| `league_messages` | League chat (paired with Supabase Realtime for live push) |
+| `league_messages` | League chat history (live push will use the Express WebSocket/SSE layer) |
 | `active_boosters` | Pick-specific booster activations (Draw Shield, Team Recall, League Pulse) — tracks exactly which league+gameweek(+team) each covers |
 | `ad_reward_progress` | Per-user-per-item watched-ad counter |
 | `chip_ledger` | Every chip movement, append-only, never mutated in place |

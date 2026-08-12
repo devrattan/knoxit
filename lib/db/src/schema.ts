@@ -4,8 +4,7 @@
 // (or wherever your existing lib/db package keeps its schema) and run
 // your migration generator (e.g. `drizzle-kit generate`) against it.
 //
-// Assumes Postgres (Supabase). Adjust import path for your drizzle-orm
-// version if it differs from what's pinned in pnpm-workspace.yaml.
+// Postgres is hosted on Neon and accessed through Drizzle ORM.
 
 import {
   pgTable,
@@ -16,8 +15,10 @@ import {
   timestamp,
   pgEnum,
   primaryKey,
+  index,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 
 // ---------------------------------------------------------------------------
 // Enums
@@ -46,11 +47,13 @@ export const chipTransactionTypeEnum = pgEnum("chip_transaction_type", [
 // ---------------------------------------------------------------------------
 // Users
 // ---------------------------------------------------------------------------
-// Minimal shape here — assumes Supabase Auth handles the actual auth table
-// (auth.users). This is the public-schema profile row keyed to it.
+// The users table owns both profile and credential data. Passwords are stored
+// only as scrypt hashes; browser sessions live in auth_sessions below.
 
 export const users = pgTable("users", {
-  id: uuid("id").primaryKey(), // matches auth.users.id
+  id: uuid("id").primaryKey().defaultRandom(),
+  email: text("email").notNull().unique(),
+  passwordHash: text("password_hash").notNull(),
   username: text("username").notNull().unique(),
   chipBalance: integer("chip_balance").notNull().default(0),
   // Refer & Earn (25 Jul 2026) — every user gets a unique shareable code;
@@ -58,7 +61,25 @@ export const users = pgTable("users", {
   referralCode: text("referral_code").notNull().unique(),
   referredByUserId: uuid("referred_by_user_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+// Opaque browser sessions. Only a SHA-256 digest is stored, so a database
+// leak does not expose usable session cookies.
+export const authSessions = pgTable(
+  "auth_sessions",
+  {
+    tokenHash: text("token_hash").primaryKey(),
+    userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    userIdIdx: index("auth_sessions_user_id_idx").on(table.userId),
+    expiresAtIdx: index("auth_sessions_expires_at_idx").on(table.expiresAt),
+  })
+);
 
 // ---------------------------------------------------------------------------
 // Notification preferences — one row per user, simple booleans. Add more
@@ -117,7 +138,11 @@ export const leagues = pgTable("leagues", {
   inviteCode: text("invite_code").unique(),
 
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => ({
+  friendsNameUnique: uniqueIndex("friends_league_name_unique")
+    .on(sql`lower(${table.name})`)
+    .where(sql`${table.type} = 'friends'`),
+}));
 
 // NOTE ON NAME UNIQUENESS (25 Jul 2026 decision):
 // Friends League names must be unique (case-insensitive) so two public
@@ -233,11 +258,8 @@ export const splitVoteResponses = pgTable(
 );
 
 // ---------------------------------------------------------------------------
-// League chat — real-time via Supabase Realtime (25 Jul 2026 decision).
-// The Express routes below only handle history fetch + insert; the actual
-// "live" part comes from clients subscribing directly to Postgres changes
-// on this table via the Supabase client SDK, not through Express. See
-// the route file header for the Realtime setup steps needed in Supabase.
+// League chat history. Live delivery will be owned by the Express service
+// through WebSocket or SSE rather than a database-vendor client subscription.
 // ---------------------------------------------------------------------------
 
 export const leagueMessages = pgTable("league_messages", {

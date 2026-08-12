@@ -17,6 +17,7 @@ type ChipTransactionType =
   | "vault_payout"
   | "chip_purchase"
   | "shop_purchase"
+  | "referral_bonus"
   | "admin_adjustment";
 
 export class InsufficientChipsError extends Error {

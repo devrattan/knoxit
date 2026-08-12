@@ -202,7 +202,7 @@ Create a frontend-ready authentication structure with:
 
 Do not invent a production token flow if the backend auth contract does not exist.
 
-Keep the provider behind an interface so that Supabase Auth, secure cookies, or another backend solution can later be connected without rewriting every page.
+Keep authentication behind the existing API/session interface so the Neon-backed secure-cookie implementation can evolve without rewriting every page.
 
 Do not store sensitive production tokens in insecure browser storage.
 

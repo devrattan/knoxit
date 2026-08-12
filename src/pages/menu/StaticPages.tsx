@@ -97,7 +97,7 @@ export function PrivacyPolicy() {
       </div>
       <Section heading="What We Collect">Placeholder — account info, gameplay data, device/usage data.</Section>
       <Section heading="How We Use It">Placeholder — running the game, fraud prevention, communications.</Section>
-      <Section heading="Third Parties">Placeholder — Supabase (hosting/auth), football-data.org (fixtures), any ad network once integrated.</Section>
+        <Section heading="Third Parties">Placeholder — Neon (database hosting), football-data.org (fixtures), the API host, email provider, and any ad network once integrated.</Section>
       <Section heading="Your Rights">Placeholder — access, correction, deletion (see Delete Account in the menu).</Section>
     </Page>
   );

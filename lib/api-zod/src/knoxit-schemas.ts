@@ -9,6 +9,28 @@
 import { z } from "zod/v4";
 
 // ---------------------------------------------------------------------------
+// Authentication
+// ---------------------------------------------------------------------------
+
+export const signupSchema = z.object({
+  username: z
+    .string()
+    .trim()
+    .min(3)
+    .max(24)
+    .regex(/^[A-Za-z0-9_]+$/, "Use only letters, numbers, and underscores"),
+  email: z.string().trim().toLowerCase().email().max(254),
+  password: z.string().min(10).max(128),
+});
+export type SignupInput = z.infer<typeof signupSchema>;
+
+export const loginSchema = z.object({
+  email: z.string().trim().toLowerCase().email().max(254),
+  password: z.string().min(1).max(128),
+});
+export type LoginInput = z.infer<typeof loginSchema>;
+
+// ---------------------------------------------------------------------------
 // Leagues
 // ---------------------------------------------------------------------------
 

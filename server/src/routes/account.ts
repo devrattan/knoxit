@@ -1,18 +1,15 @@
 // artifacts/api-server/src/routes/account.ts
 //
-// Sign Out itself needs NO backend route — it's purely client-side
-// (supabase.auth.signOut() clears the session token locally). Everything
-// else here is real.
+// Sign out is handled by POST /api/auth/logout, which revokes the current
+// Neon-backed session and clears the HttpOnly cookie.
 //
 // NOTE: Delete Account was removed from the product (25 Jul 2026) — no
 // DELETE /api/account route here. If it comes back later, remember: every
 // table referencing users.id already uses `onDelete: "cascade"`
 // (league_members, picks, join_requests, chip_ledger, league_messages,
 // active_boosters, ad_reward_progress, notification_preferences), so
-// deleting the users row would cascade automatically — no manual cleanup
-// needed across those tables. It would still need a separate
-// supabase.auth.admin.deleteUser(userId) call to remove the actual auth
-// identity, since that's a different system from this public.users row.
+// deleting the users row would cascade automatically, including auth
+// sessions, so no second identity-provider cleanup is required.
 
 import { Router } from "express";
 import { db } from "@db/index";

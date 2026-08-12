@@ -51,8 +51,8 @@ export default function LeagueDetail() {
   const [votes, setVotes] = useState<VoteEntry[]>([]);
 
   // TODO: replace with real history from GET /api/leagues/:id/messages,
-  // then keep appending via the Supabase Realtime subscription (see
-  // chat.ts). This local state + optimistic send is a stand-in only.
+  // then keep appending through the planned authenticated WebSocket/SSE
+  // channel. This local state + optimistic send is a stand-in only.
   const [chatMessages, setChatMessages] = useState(d.chat);
   const [draft, setDraft] = useState("");
   const sendMessage = () => {
@@ -306,9 +306,9 @@ export default function LeagueDetail() {
           {/*
             TODO: replace this whole chat block with:
             1. On mount: GET /api/leagues/:id/messages for history
-            2. Subscribe to Supabase Realtime on the league_messages table
+            2. Subscribe to the Express WebSocket/SSE channel for this league
                (filtered to this leagueId) to append new messages live —
-               see chat.ts's header comment for the exact subscribe snippet
+               see chat.ts's header comment for the planned transport
             3. Unsubscribe on unmount
             The optimistic local append below is a stand-in so the input
             feels real during design review; it does NOT persist or sync

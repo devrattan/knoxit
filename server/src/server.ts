@@ -10,17 +10,28 @@ import { shopRouter } from "./routes/shop";
 import { splitVoteRouter } from "./routes/splitVote";
 import { standingsRouter } from "./routes/standings";
 import { attachUser } from "./middleware/auth";
+import { authRouter } from "./routes/auth";
 
 export function createServer() {
   const app = express();
 
-  app.use(cors({ origin: true, credentials: true }));
+  const allowedOrigins = (process.env.APP_ORIGIN ?? "http://localhost:5173")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
+  app.use(cors({
+    credentials: true,
+    origin(origin, callback) {
+      if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+      return callback(new Error("Origin is not allowed"));
+    }
+  }));
   app.use(express.json());
 
   app.get("/health", (_req, res) => res.json({ ok: true }));
-  app.get("/api/session", attachUser, (req, res) => {
-    res.json({ user: { id: req.userId, username: "You" } });
-  });
+  app.use("/api/auth", authRouter);
+  app.get("/api/session", attachUser, (req, res) => res.json({ user: req.authUser }));
 
   app.use("/api/account", attachUser, accountRouter);
   app.use("/api/friends-leagues", attachUser, friendsLeaguesRouter);

@@ -1,8 +1,7 @@
 // artifacts/api-server/src/routes/leagues.ts
 //
-// Assumes an auth middleware upstream attaches `req.userId` (decoded from
-// the Supabase Auth JWT). Adjust the import paths below to match your
-// actual lib/db and lib/api-zod locations.
+// The session middleware validates the Neon-backed session cookie and
+// attaches `req.userId` before this router runs.
 
 import { Router } from "express";
 import { eq, and, count, sql } from "drizzle-orm";

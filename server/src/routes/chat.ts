@@ -1,41 +1,8 @@
 // artifacts/api-server/src/routes/chat.ts
 //
-// Real-time league chat (25 Jul 2026 decision). Important: the "real-time"
-// part does NOT happen in this file. These two REST routes only handle
-// fetching history and inserting new messages — the live push to other
-// members happens because clients subscribe directly to Postgres changes
-// on `league_messages` via the Supabase client SDK (supabase-js), which is
-// a separate mechanism from this Express API.
-//
-// ---------------------------------------------------------------------------
-// ONE-TIME SUPABASE SETUP REQUIRED (do this in the Supabase dashboard, not
-// in code):
-//   1. Table Editor → league_messages → enable Realtime (toggle "Enable
-//      Realtime" or run: ALTER PUBLICATION supabase_realtime ADD TABLE
-//      league_messages;)
-//   2. Add an RLS policy so a user can only SELECT messages for leagues
-//      they're a member of — e.g.:
-//        CREATE POLICY "members can read league messages"
-//          ON league_messages FOR SELECT
-//          USING (EXISTS (
-//            SELECT 1 FROM league_members
-//            WHERE league_members.league_id = league_messages.league_id
-//            AND league_members.user_id = auth.uid()
-//          ));
-//   3. Similarly restrict INSERT to league members only.
-// Without these, either chat won't update live (step 1) or anyone could
-// read/write messages for leagues they're not in (steps 2-3).
-// ---------------------------------------------------------------------------
-//
-// FRONTEND SUBSCRIBE EXAMPLE (goes in your React chat component, not here):
-//   const channel = supabase
-//     .channel(`league-${leagueId}-messages`)
-//     .on('postgres_changes',
-//       { event: 'INSERT', schema: 'public', table: 'league_messages', filter: `league_id=eq.${leagueId}` },
-//       (payload) => appendMessageToUI(payload.new)
-//     )
-//     .subscribe();
-//   // Remember to channel.unsubscribe() on unmount.
+// These REST routes own authorized history reads and message inserts in Neon.
+// Live delivery is a separate pending feature and should be implemented by
+// the Express service using authenticated WebSocket rooms or SSE streams.
 
 import { Router } from "express";
 import { eq, and, asc } from "drizzle-orm";
@@ -46,9 +13,7 @@ import { sendMessageSchema } from "@api-zod/knoxit-schemas";
 export const chatRouter = Router();
 
 // ---------------------------------------------------------------------------
-// GET /api/leagues/:id/messages — chat history (initial load only; live
-// updates after that come from the Supabase Realtime subscription, not
-// repeated calls to this endpoint)
+// GET /api/leagues/:id/messages — authorized chat history.
 // ---------------------------------------------------------------------------
 
 chatRouter.get("/:id/messages", async (req, res) => {

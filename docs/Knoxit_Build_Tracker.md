@@ -1,5 +1,11 @@
 # KNOXIT — Master Build Tracker
 
+> Architecture correction, 12 Aug 2026: Neon Postgres replaces Supabase.
+> Email/password signup, login, session lookup, and logout are now implemented
+> through Express with Neon-backed opaque sessions. Older Supabase Auth and
+> Supabase Realtime entries below are historical; live chat will use an
+> authenticated Express WebSocket/SSE transport.
+
 Legend: ✅ Done &nbsp; 🔧 In progress &nbsp; ⬜ Not started &nbsp; ❓ Unconfirmed (needs you to verify in Replit)
 
 Last updated: 25 July 2026 · Target launch: 22 Aug 2026 (EPL GW1) — **28 days out**
@@ -15,33 +21,33 @@ Last updated: 25 July 2026 · Target launch: 22 Aug 2026 (EPL GW1) — **28 days
 
 ---
 
-## 1. DATABASE (Supabase)
+## 1. DATABASE (Neon Postgres)
 
-- ❓ `fixtures` table created in Supabase (id, home_team, away_team, matchday, utc_date, status, home_score, away_score) — per replit.md this must be created manually, no confirmation it's done
-- ⬜ `users` / auth table — not mentioned yet, needed before any pick logic
+- ❓ `fixtures` table created in Neon (id, home_team, away_team, matchday, utc_date, status, home_score, away_score) — not present in the current Drizzle schema
+- ✅ `users` and `auth_sessions` tables — defined in Drizzle with an initial Neon migration
 - ⬜ `leagues` table (league_id, sport, format, entry_fee, vault, gameweek, status) — **vault field must support incremental growth per joiner (decided 22 Jul 2026)**, not a fixed value set at league creation
 - ⬜ `league_members` table (user_id, league_id, status: alive/knocked_out)
 - ⬜ `picks` table (user_id, league_id, gameweek, primary_pick, backup_pick, result)
 - ⬜ `chips_ledger` table (user_id, balance, transaction_history) — needed once Shop goes live
 - ✅ `league_messages` table (id, league_id, user_id, content, created_at) — powers league chat, schema written
-- ⬜ RLS (Row Level Security) policies — critical before real user data touches Supabase. **`league_messages` specifically needs this before launch** — without it, anyone could read/write chat for leagues they're not in (see `chat.ts` for the exact policy needed)
-- ⬜ **Supabase Realtime must be manually enabled on `league_messages`** in the dashboard (not code) — league chat won't actually be live without this step
+- ✅ League-message reads and writes are authorized through Express membership checks; the browser does not connect directly to Neon
+- ⬜ Authenticated Express WebSocket/SSE delivery for live league chat
 - ⬜ Seed/test data plan for demo leagues
 
 ## 2. API / BACKEND (`artifacts/api-server`)
 
 - ✅ Express 5 server scaffolded
-- ✅ `POST /api/fixtures/sync` — pulls from football-data.org, upserts to Supabase
+- ✅ `POST /api/fixtures/sync` — pulls from football-data.org and should upsert to Neon
 - ✅ `GET /api/fixtures` — returns stored fixtures
-- ✅ Supabase client wrapper (`lib/supabase.ts`) — null-safe if env vars missing
+- ✅ Drizzle/Postgres database wrapper (`lib/db/src/index.ts`) using `DATABASE_URL`
 - ✅ football-data.org fetch helper — server-side only, key never exposed
-- ⬜ Auth endpoints (signup/login/session) — Supabase Auth or custom?
+- ✅ Auth endpoints — signup, login, session lookup, and logout with Neon-backed opaque sessions
 - ⬜ `POST /api/leagues` — create league
 - ⬜ `POST /api/leagues/:id/join` — join league
 - ⬜ `POST /api/picks` — submit pick (with lock-time validation)
 - ✅ `GET /api/picks/me` — user's picks across all leagues (powers Picks tab), written
 - ✅ `GET /api/leagues/available-teams/:leagueId` — used/available teams for the Pick Submission screen
-- ✅ `GET /api/leagues/:id/messages`, `POST /api/leagues/:id/messages` — league chat history + send (live push handled by Supabase Realtime, not these routes)
+- ✅ `GET /api/leagues/:id/messages`, `POST /api/leagues/:id/messages` — authorized league chat history + send; live transport remains pending
 - 🔧 `GET /api/standings/:league` — route scaffolded (`standings.ts`), but the actual football-data.org call is stubbed (501) since it needs your existing `footballData.ts` helper's real export name/signature, which isn't visible from here — quick fix once someone fills in the one marked TODO line
 - ⬜ Elimination/results engine — cron or webhook that resolves picks after matches complete
 - ⬜ `GET /api/leagues/:id` — league detail / command center data
@@ -100,10 +106,10 @@ Per your Build Order in replit.md:
   - **Removed (25 Jul 2026): Delete Account.** No longer in the drawer, Profile page, or backend (`account.ts` no longer has a `DELETE /api/account` route). If it's added back later, the cascade-delete groundwork is still documented in `account.ts`'s header comment — every relevant table already uses `onDelete: "cascade"`, so re-adding it later is straightforward.
   - Real backend, not just UI: new `account.ts` routes — `GET`/`PATCH /api/account/notifications`, `GET /api/account/referral`, `POST /api/account/referral/redeem` (rewards both parties in chips via the existing chip ledger).
   - New `users.referralCode` / `referredByUserId` columns and a `notification_preferences` table added to schema; `referral_bonus` added to the chip transaction type enum.
-  - Sign Out has a simple confirm step, placeholder-wired (no real Supabase Auth call yet) since actual auth/session handling doesn't exist yet.
+  - Sign Out calls the real session-revocation endpoint and returns to Login.
   - Terms & Conditions and Privacy Policy are explicitly marked as **placeholder legal text** in the code itself — not reviewed, not for launch as-is.
   - Invite Friends and Refer & Earn kept as two separate, distinctly-scoped pages per explicit request — Invite Friends is a simple share action, Refer & Earn is the fuller stats/code page — both draw from the same referral code.
-- ⬜ Onboarding / auth screens (login, signup) — not designed yet at all
+- ✅ Login and signup screens are wired to the real API; password-reset email delivery remains pending
 
 ## 4. INTERNAL CODING / BUSINESS LOGIC
 
@@ -137,4 +143,4 @@ Per your Build Order in replit.md:
 ## Suggested next action
 Home, My Leagues, League Detail, Opponent Profile, Explore Leagues, the full Friends League flow, Picks, Fixtures, Shop, and the side menu are all built with matching backend. Remaining major gaps: **auth/onboarding screens** (nothing exists yet — genuinely blocks real users from ever signing in, arguably the single biggest remaining gap given everything else assumes a logged-in user), Leaderboard, Standings, and the results/elimination engine that would call `resolvePick()` after real match data comes in.
 
-Remaining ❓ item: whether the `fixtures` table actually exists in Supabase yet — worth a quick check in the Replit dashboard.
+Remaining ❓ item: whether the `fixtures` table exists in Neon yet; it is not in the current Drizzle schema.

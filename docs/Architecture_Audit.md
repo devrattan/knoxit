@@ -17,14 +17,14 @@
 - `npm run typecheck`: passes for the production web app.
 - `npm test`: passes 7 domain/business-rule tests.
 - `npm run build`: passes and writes `dist/`.
-- `npm run typecheck:server`: currently fails due Drizzle insert/update type mismatches in the supplied backend handoff bundle. The route logic and schema are preserved, but the server needs a follow-up pass to align the Drizzle package version or update route write types.
+- `npm run typecheck:server`: passes after aligning Drizzle ORM with the current schema types.
 
 ## Known Product/Backend Blockers
 
-- Real auth provider/session/token flow is not connected. The app uses a mock session adapter in mock mode.
+- Neon-backed email/password authentication and opaque cookie sessions are connected. Password reset email delivery is still pending an email provider.
 - Results/elimination cron or webhook is not implemented.
 - Standings data remains a 501 route until the real football-data helper is connected.
 - Real-money chip packs stay disabled until Stripe/IAP integration exists.
 - Rewarded ads require server-side ad network verification; client-side counters must not grant production rewards.
-- Supabase Realtime and RLS must be configured manually for `league_messages`.
+- Live chat delivery still needs an Express-owned WebSocket or SSE layer; REST history and membership authorization already exist.
 - Placeholder Terms and Privacy copy is not launch-ready legal text.

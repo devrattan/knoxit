@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: knoxit-api
+    runtime: node
+    region: singapore
+    plan: free
+    buildCommand: npm ci --include=dev && npm run typecheck:server
+    startCommand: npm run db:migrate && npm run start:api
+    healthCheckPath: /health
+    autoDeployTrigger: commit
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: APP_ORIGIN
+        sync: false
+      - key: COOKIE_SAME_SITE
+        value: none
+      - key: SESSION_TTL_DAYS
+        value: 30
