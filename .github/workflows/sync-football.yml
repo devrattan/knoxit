@@ -1,0 +1,26 @@
+name: Sync football data
+
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: sync-football-data
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Refresh cached fixtures and standings
+        env:
+          BACKEND_SYNC_URL: ${{ secrets.BACKEND_SYNC_URL }}
+          FOOTBALL_SYNC_SECRET: ${{ secrets.FOOTBALL_SYNC_SECRET }}
+        run: |
+          test -n "$BACKEND_SYNC_URL"
+          test -n "$FOOTBALL_SYNC_SECRET"
+          curl --fail-with-body --show-error --silent \
+            --request POST \
+            --header "x-sync-secret: $FOOTBALL_SYNC_SECRET" \
+            "$BACKEND_SYNC_URL/api/fixtures/sync"

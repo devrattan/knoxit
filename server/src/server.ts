@@ -11,6 +11,7 @@ import { splitVoteRouter } from "./routes/splitVote";
 import { standingsRouter } from "./routes/standings";
 import { attachUser } from "./middleware/auth";
 import { authRouter } from "./routes/auth";
+import { fixturesRouter } from "./routes/fixtures";
 
 export function createServer() {
   const app = express();
@@ -31,6 +32,7 @@ export function createServer() {
 
   app.get("/health", (_req, res) => res.json({ ok: true }));
   app.use("/api/auth", authRouter);
+  app.use("/api/fixtures", fixturesRouter);
   app.get("/api/session", attachUser, (req, res) => res.json({ user: req.authUser }));
 
   app.use("/api/account", attachUser, accountRouter);

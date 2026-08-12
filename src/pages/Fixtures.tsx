@@ -1,51 +1,52 @@
-// artifacts/knoxit/src/pages/Fixtures.tsx
-// Route: /fixtures
-//
-// Rebuilt 25 Jul 2026: gameweek-based navigation (◀ Gameweek N ▶) replaces
-// the earlier Today/Tomorrow/Upcoming sections entirely. Upcoming gameweeks
-// show kickoff time + venue; completed gameweeks show the final score plus
-// each team's last-5 form badges.
-//
-// Data sources once wired up (currently mockData):
-// - Fixtures per gameweek: GET /api/fixtures (already exists per replit.md)
-//   filtered by gameweek/matchday — add a ?matchday= param server-side if
-//   the client-side filter here gets unwieldy with real data volume.
-// - Form Guide table: GET /api/standings/:league (new — see standings.ts)
-
-import { useState } from "react";
-import { Search, Filter, ChevronLeft, ChevronRight } from "lucide-react";
+import { useMemo, useState } from "react";
+import { ChevronLeft, ChevronRight, Filter, RefreshCw, Search } from "lucide-react";
 import { Header } from "../components/Header";
 import { BottomNav } from "../components/BottomNav";
-import { fixturesLeagues, currentGameweek, gameweekFixtures, formGuide } from "../services/mockData";
+import { ErrorState, Skeleton } from "../components/ui/Feedback";
+import {
+  type FootballFixture,
+  useGetFixturesQuery,
+  useGetFootballCompetitionsQuery,
+  useGetStandingsQuery,
+} from "../services/api/knoxitApi";
 
 function FormBadge({ result }: { result: string }) {
   const cls = result === "W" ? "bg-emerald-500/20 text-emerald-400"
     : result === "L" ? "bg-red-500/20 text-red-400"
     : "bg-zinc-600/30 text-zinc-400";
-  return <span className={`w-4 h-4 rounded-full text-[8px] font-bold flex items-center justify-center ${cls}`}>{result}</span>;
+  return <span className={`flex h-4 w-4 items-center justify-center rounded-full text-[8px] font-bold ${cls}`}>{result}</span>;
 }
 
-function FixtureRow({ f }: { f: (typeof gameweekFixtures)[number][number] }) {
+function FixtureRow({ fixture, teamForms }: { fixture: FootballFixture; teamForms: Map<number, string[]> }) {
+  const finished = fixture.status === "FINISHED" || fixture.status === "AWARDED";
+  const kickoff = new Intl.DateTimeFormat(undefined, {
+    weekday: "short",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(fixture.utcDate));
+  const homeForm = fixture.homeTeamId === null ? [] : teamForms.get(fixture.homeTeamId) ?? [];
+  const awayForm = fixture.awayTeamId === null ? [] : teamForms.get(fixture.awayTeamId) ?? [];
+
   return (
-    <div className="bg-white/[0.03] border border-white/5 rounded-xl px-3 py-2.5 mb-2">
+    <div className="mb-2 rounded-xl border border-white/5 bg-white/[0.03] px-3 py-2.5">
       <div className="flex items-center justify-between">
         <div className="flex-1">
-          <div className="text-white text-[13px] font-semibold">{f.home}</div>
-          <div className="flex gap-1 mt-1">{f.homeForm.map((r, i) => <FormBadge key={i} result={r} />)}</div>
+          <div className="text-[13px] font-semibold text-white">{fixture.homeTeamShortName ?? fixture.homeTeamName}</div>
+          <div className="mt-1 flex gap-1">{homeForm.map((result, index) => <FormBadge key={index} result={result} />)}</div>
         </div>
-        <div className="text-center px-3">
-          {f.status === "completed" ? (
-            <div className="text-white text-[15px] font-extrabold">{f.homeScore} - {f.awayScore}</div>
+        <div className="px-3 text-center">
+          {finished ? (
+            <div className="text-[15px] font-extrabold text-white">{fixture.homeScore ?? "–"} - {fixture.awayScore ?? "–"}</div>
           ) : (
             <>
-              <div className="text-zinc-300 text-[12px] font-bold">{f.time}</div>
-              <div className="text-zinc-600 text-[9px]">{f.venue}</div>
+              <div className="text-[12px] font-bold text-zinc-300">{kickoff}</div>
+              <div className="max-w-[110px] truncate text-[9px] text-zinc-600">{fixture.venue ?? fixture.status.replaceAll("_", " ")}</div>
             </>
           )}
         </div>
         <div className="flex-1 text-right">
-          <div className="text-white text-[13px] font-semibold">{f.away}</div>
-          <div className="flex gap-1 mt-1 justify-end">{f.awayForm.map((r, i) => <FormBadge key={i} result={r} />)}</div>
+          <div className="text-[13px] font-semibold text-white">{fixture.awayTeamShortName ?? fixture.awayTeamName}</div>
+          <div className="mt-1 flex justify-end gap-1">{awayForm.map((result, index) => <FormBadge key={index} result={result} />)}</div>
         </div>
       </div>
     </div>
@@ -54,19 +55,36 @@ function FixtureRow({ f }: { f: (typeof gameweekFixtures)[number][number] }) {
 
 export default function Fixtures() {
   const [league, setLeague] = useState("epl");
-  const [gw, setGw] = useState(currentGameweek);
+  const [selectedMatchdays, setSelectedMatchdays] = useState<Record<string, number>>({});
+  const competitionsQuery = useGetFootballCompetitionsQuery();
+  const fixturesQuery = useGetFixturesQuery({ league });
+  const standingsQuery = useGetStandingsQuery(league);
 
-  const fixtures = gameweekFixtures[gw] ?? [];
-  const hasEarlier = gameweekFixtures[gw - 1] !== undefined;
-  const hasLater = gameweekFixtures[gw + 1] !== undefined;
+  const matchdays = useMemo(
+    () => Array.from(new Set((fixturesQuery.data?.fixtures ?? []).flatMap((fixture) => fixture.matchday === null ? [] : [fixture.matchday]))).sort((a, b) => a - b),
+    [fixturesQuery.data]
+  );
+  const competition = competitionsQuery.data?.find((item) => item.key === league) ?? fixturesQuery.data?.competitions[0];
+  const defaultMatchday = competition?.currentMatchday ?? matchdays[0];
+  const matchday = selectedMatchdays[league] ?? defaultMatchday;
+  const matchdayIndex = matchday === undefined ? -1 : matchdays.indexOf(matchday);
+  const fixtures = (fixturesQuery.data?.fixtures ?? []).filter((fixture) => fixture.matchday === matchday);
+  const teamForms = useMemo(
+    () => new Map((standingsQuery.data?.standings ?? []).map((standing) => [standing.teamId, standing.form])),
+    [standingsQuery.data]
+  );
+
+  const selectMatchday = (value: number) => setSelectedMatchdays((current) => ({ ...current, [league]: value }));
+  const loading = competitionsQuery.isLoading || fixturesQuery.isLoading;
+  const loadError = competitionsQuery.isError || fixturesQuery.isError;
 
   return (
     <>
       <Header betaLabel="BETA" />
-      <div className="px-4 flex items-center justify-between mb-1">
+      <div className="mb-1 flex items-center justify-between px-4">
         <div>
-          <div className="text-white text-[16px] font-extrabold">Fixtures</div>
-          <div className="text-zinc-500 text-[10px]">Explore fixtures. Check form. Plan your picks.</div>
+          <div className="text-[16px] font-extrabold text-white">Fixtures</div>
+          <div className="text-[10px] text-zinc-500">Latest schedules, scores and form from the synced football feed.</div>
         </div>
         <div className="flex gap-2">
           <Search size={16} className="text-zinc-400" />
@@ -74,59 +92,67 @@ export default function Fixtures() {
         </div>
       </div>
 
-      <div className="flex gap-2 px-4 pt-2 overflow-x-auto no-scrollbar">
-        {fixturesLeagues.map((l) => (
+      <div className="flex gap-2 overflow-x-auto px-4 pt-2 no-scrollbar">
+        {(competitionsQuery.data ?? []).map((item) => (
           <button
-            key={l.key}
-            onClick={() => setLeague(l.key)}
-            className={`shrink-0 text-[11px] font-semibold rounded-full px-3 py-1.5 border ${
-              league === l.key ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-400" : "border-white/10 text-zinc-400"
+            key={item.key}
+            onClick={() => setLeague(item.key)}
+            className={`shrink-0 rounded-full border px-3 py-1.5 text-[11px] font-semibold ${
+              league === item.key ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-400" : "border-white/10 text-zinc-400"
             }`}
           >
-            {l.label}
+            {item.shortLabel ?? item.name}
           </button>
         ))}
       </div>
 
-      <div className="flex items-center justify-between px-4 pt-4 pb-2">
+      <div className="flex items-center justify-between px-4 pb-2 pt-4">
         <button
-          onClick={() => hasEarlier && setGw((g) => g - 1)}
-          disabled={!hasEarlier}
-          className="w-8 h-8 rounded-full bg-white/[0.03] border border-white/10 flex items-center justify-center disabled:opacity-30"
+          onClick={() => matchdayIndex > 0 && selectMatchday(matchdays[matchdayIndex - 1])}
+          disabled={matchdayIndex <= 0}
+          className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-white/[0.03] disabled:opacity-30"
         >
           <ChevronLeft size={16} className="text-zinc-300" />
         </button>
         <div className="text-center">
-          <div className="text-white text-[14px] font-bold">Gameweek {gw}</div>
-          {gw === currentGameweek && <div className="text-emerald-400 text-[10px] font-medium">Current</div>}
+          <div className="text-[14px] font-bold text-white">{matchday === undefined ? "No matchday" : `Gameweek ${matchday}`}</div>
+          {matchday === competition?.currentMatchday && <div className="text-[10px] font-medium text-emerald-400">Current</div>}
         </div>
         <button
-          onClick={() => hasLater && setGw((g) => g + 1)}
-          disabled={!hasLater}
-          className="w-8 h-8 rounded-full bg-white/[0.03] border border-white/10 flex items-center justify-center disabled:opacity-30"
+          onClick={() => matchdayIndex >= 0 && matchdayIndex < matchdays.length - 1 && selectMatchday(matchdays[matchdayIndex + 1])}
+          disabled={matchdayIndex < 0 || matchdayIndex >= matchdays.length - 1}
+          className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-white/[0.03] disabled:opacity-30"
         >
           <ChevronRight size={16} className="text-zinc-300" />
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto no-scrollbar px-4 pb-2">
-        {fixtures.map((f) => <FixtureRow key={f.id} f={f} />)}
-        {fixtures.length === 0 && (
-          <div className="text-center text-zinc-500 text-[12px] pt-12">No fixtures for this gameweek yet.</div>
-        )}
+      <div className="flex-1 overflow-y-auto px-4 pb-2 no-scrollbar">
+        {loading ? <><Skeleton className="mb-2 h-16" /><Skeleton className="mb-2 h-16" /><Skeleton className="h-16" /></> : null}
+        {loadError ? <ErrorState title="Could not load fixtures" onRetry={() => { competitionsQuery.refetch(); fixturesQuery.refetch(); }} /> : null}
+        {!loading && !loadError ? fixtures.map((fixture) => <FixtureRow key={fixture.providerId} fixture={fixture} teamForms={teamForms} />) : null}
+        {!loading && !loadError && fixtures.length === 0 ? (
+          <div className="pt-12 text-center text-[12px] text-zinc-500">No cached fixtures for this matchday. Run the football sync on the backend.</div>
+        ) : null}
 
-        <div className="text-[11px] font-bold text-zinc-400 tracking-wide mb-2 mt-4">FORM GUIDE (LAST 5 MATCHES)</div>
-        <div className="bg-white/[0.03] border border-white/5 rounded-xl overflow-hidden mb-2">
-          {formGuide.map((t) => (
-            <div key={t.rank} className="flex items-center gap-2 px-3 py-2 border-b border-white/5 last:border-0">
-              <span className="text-zinc-500 text-[11px] w-4">{t.rank}</span>
-              <span className="text-white text-[12px] font-medium flex-1">{t.team}</span>
-              <div className="flex gap-1">{t.form.map((r, i) => <FormBadge key={i} result={r} />)}</div>
-              <span className="text-white text-[12px] font-bold w-8 text-right">{t.points}</span>
+        <div className="mb-2 mt-4 flex items-center justify-between">
+          <div className="text-[11px] font-bold tracking-wide text-zinc-400">FORM GUIDE (LAST 5 MATCHES)</div>
+          {competition?.lastSyncedAt ? (
+            <div className="flex items-center gap-1 text-[9px] text-zinc-600"><RefreshCw size={9} /> Synced {new Date(competition.lastSyncedAt).toLocaleString()}</div>
+          ) : null}
+        </div>
+        <div className="mb-2 overflow-hidden rounded-xl border border-white/5 bg-white/[0.03]">
+          {(standingsQuery.data?.standings ?? []).slice(0, 10).map((team) => (
+            <div key={team.id} className="flex items-center gap-2 border-b border-white/5 px-3 py-2 last:border-0">
+              <span className="w-4 text-[11px] text-zinc-500">{team.position}</span>
+              <span className="flex-1 text-[12px] font-medium text-white">{team.teamShortName ?? team.teamName}</span>
+              <div className="flex gap-1">{team.form.map((result, index) => <FormBadge key={index} result={result} />)}</div>
+              <span className="w-8 text-right text-[12px] font-bold text-white">{team.points}</span>
             </div>
           ))}
+          {standingsQuery.isLoading ? <Skeleton className="m-3 h-24" /> : null}
+          {standingsQuery.isError ? <div className="p-3 text-center text-[11px] text-zinc-500">Standings are not cached yet.</div> : null}
         </div>
-        <button className="text-emerald-400 text-[11px] font-medium mb-2">View Full Table</button>
       </div>
       <BottomNav />
     </>

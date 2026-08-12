@@ -15,6 +15,13 @@
       "when": 1786543901138,
       "tag": "0001_calm_shiva",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1786558205130,
+      "tag": "0002_flimsy_dakota_north",
+      "breakpoints": true
     }
   ]
 }

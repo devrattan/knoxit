@@ -8,12 +8,63 @@ import {
 } from "../../lib/mockData";
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || (import.meta.env.DEV ? "http://localhost:4000" : "");
-const useMockApi = import.meta.env.VITE_USE_MOCK_API !== "false";
+const useMockApi = import.meta.env.VITE_USE_MOCK_API === "true";
 
 export type SessionUser = {
   id: string;
   email: string;
   username: string;
+};
+
+export type FootballCompetition = {
+  key: string;
+  providerCode: string;
+  name: string;
+  shortLabel?: string;
+  emblem: string | null;
+  seasonStartYear: number | null;
+  currentMatchday: number | null;
+  lastSyncedAt: string | null;
+};
+
+export type FootballFixture = {
+  providerId: number;
+  competitionKey: string;
+  seasonStartYear: number | null;
+  matchday: number | null;
+  stage: string | null;
+  group: string | null;
+  utcDate: string;
+  status: string;
+  venue: string | null;
+  homeTeamId: number | null;
+  homeTeamName: string;
+  homeTeamShortName: string | null;
+  homeTeamCrest: string | null;
+  awayTeamId: number | null;
+  awayTeamName: string;
+  awayTeamShortName: string | null;
+  awayTeamCrest: string | null;
+  winner: string | null;
+  homeScore: number | null;
+  awayScore: number | null;
+};
+
+export type FootballStanding = {
+  id: string;
+  group: string | null;
+  position: number;
+  teamId: number;
+  teamName: string;
+  teamShortName: string | null;
+  teamCrest: string | null;
+  playedGames: number;
+  form: string[];
+  won: number;
+  draw: number;
+  lost: number;
+  points: number;
+  goalDifference: number;
 };
 
 type MockArgs = string | { url: string; method?: string; body?: any };
@@ -104,6 +155,18 @@ export const knoxitApi = createApi({
     getChipBalance: builder.query<{ balance: number }, void>({
       query: () => "/api/shop/balance",
       providesTags: ["Shop"]
+    }),
+    getFootballCompetitions: builder.query<FootballCompetition[], void>({
+      query: () => "/api/fixtures/competitions",
+      providesTags: ["Fixture"]
+    }),
+    getFixtures: builder.query<{ competitions: FootballCompetition[]; fixtures: FootballFixture[] }, { league: string }>({
+      query: ({ league }) => `/api/fixtures?league=${encodeURIComponent(league)}`,
+      providesTags: ["Fixture"]
+    }),
+    getStandings: builder.query<{ competition: FootballCompetition; standings: FootballStanding[] }, string>({
+      query: (league) => `/api/standings/${encodeURIComponent(league)}`,
+      providesTags: ["Fixture"]
     })
   })
 });
@@ -118,5 +181,8 @@ export const {
   useGetPublicFriendsLeaguesQuery,
   useRequestFriendsLeagueMutation,
   useJoinByCodeMutation,
-  useGetChipBalanceQuery
+  useGetChipBalanceQuery,
+  useGetFootballCompetitionsQuery,
+  useGetFixturesQuery,
+  useGetStandingsQuery
 } = knoxitApi;

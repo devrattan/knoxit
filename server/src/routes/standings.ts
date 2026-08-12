@@ -1,49 +1,61 @@
-// artifacts/api-server/src/routes/standings.ts
-//
-// Powers the Fixtures tab's "Form Guide" table (points + last-5 results
-// per team). This is genuinely separate from your existing fixtures sync
-// — football-data.org exposes standings via a different endpoint
-// (/v4/competitions/{code}/standings), not derivable from the fixtures
-// table alone. Uses the same server-side-only API key pattern as your
-// existing footballData.ts helper — adjust the import to match its real
-// exported function name/signature, since I don't have visibility into
-// that file's exact contents from here.
-
 import { Router } from "express";
-// import { fetchFromFootballData } from "../lib/footballData"; // adjust to match your existing helper's actual export
+import { and, asc, desc, eq } from "drizzle-orm";
+import { db } from "@db/index";
+import { footballCompetitions, footballFixtures, footballStandings } from "@db/schema";
+import { isFootballCompetitionKey } from "../lib/footballCompetitions";
 
 export const standingsRouter = Router();
 
-const COMPETITION_CODES: Record<string, string> = {
-  epl: "PL",
-  la_liga: "PD",
-  bundesliga: "BL1",
-  serie_a: "SA",
-  ucl: "CL",
-};
-
-// ---------------------------------------------------------------------------
-// GET /api/standings/:league — table with points + last-5 form per team
-// ---------------------------------------------------------------------------
-
 standingsRouter.get("/:league", async (req, res) => {
   const leagueKey = req.params.league;
-  const competitionCode = COMPETITION_CODES[leagueKey];
-  if (!competitionCode) {
+  if (!isFootballCompetitionKey(leagueKey)) {
     return res.status(400).json({ error: `Unknown league key: ${leagueKey}` });
   }
 
-  // TODO: replace this stub with a real call through your existing
-  // footballData.ts helper, e.g.:
-  //   const data = await fetchFromFootballData(`/v4/competitions/${competitionCode}/standings`);
-  // football-data.org's standings response includes a `form` string per
-  // team (e.g. "W,W,D,W,W") — split on comma for the badge row, and
-  // `points` directly off each standing entry. Consider caching this
-  // (e.g. 15-60 min TTL) since standings don't change mid-match and this
-  // avoids hammering football-data.org's rate limits every time someone
-  // opens the Fixtures tab.
-  res.status(501).json({
-    error: "Not implemented — wire this to football-data.org's standings endpoint via your existing footballData.ts helper.",
-    competitionCode,
+  const [competition] = await db
+    .select()
+    .from(footballCompetitions)
+    .where(eq(footballCompetitions.key, leagueKey));
+  if (!competition || competition.seasonStartYear === null) {
+    return res.status(404).json({ error: "Competition has not been synced yet" });
+  }
+
+  const rows = await db
+    .select()
+    .from(footballStandings)
+    .where(
+      and(
+        eq(footballStandings.competitionKey, leagueKey),
+        eq(footballStandings.seasonStartYear, competition.seasonStartYear),
+        eq(footballStandings.type, "TOTAL")
+      )
+    )
+    .orderBy(asc(footballStandings.group), asc(footballStandings.position));
+
+  const finishedFixtures = await db
+    .select()
+    .from(footballFixtures)
+    .where(and(eq(footballFixtures.competitionKey, leagueKey), eq(footballFixtures.status, "FINISHED")))
+    .orderBy(desc(footballFixtures.utcDate));
+
+  function calculatedForm(teamId: number) {
+    return finishedFixtures
+      .filter((fixture) => fixture.homeTeamId === teamId || fixture.awayTeamId === teamId)
+      .slice(0, 5)
+      .map((fixture) => {
+        if (fixture.winner === "DRAW") return "D";
+        const won = (fixture.homeTeamId === teamId && fixture.winner === "HOME_TEAM")
+          || (fixture.awayTeamId === teamId && fixture.winner === "AWAY_TEAM");
+        return won ? "W" : "L";
+      })
+      .reverse();
+  }
+
+  res.json({
+    competition,
+    standings: rows.map((row) => ({
+      ...row,
+      form: row.form?.split(",").filter(Boolean).slice(-5) ?? calculatedForm(row.teamId),
+    })),
   });
 });

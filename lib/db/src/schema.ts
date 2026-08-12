@@ -97,6 +97,91 @@ export const notificationPreferences = pgTable("notification_preferences", {
 });
 
 // ---------------------------------------------------------------------------
+// Provider-backed football data. The browser reads these cached Neon rows;
+// only the server-side sync process talks to football-data.org.
+// ---------------------------------------------------------------------------
+
+export const footballCompetitions = pgTable("football_competitions", {
+  key: text("key").primaryKey(),
+  providerCode: text("provider_code").notNull().unique(),
+  name: text("name").notNull(),
+  emblem: text("emblem"),
+  seasonStartYear: integer("season_start_year"),
+  currentMatchday: integer("current_matchday"),
+  lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const footballFixtures = pgTable(
+  "football_fixtures",
+  {
+    providerId: integer("provider_id").primaryKey(),
+    competitionKey: text("competition_key").notNull().references(() => footballCompetitions.key, { onDelete: "cascade" }),
+    seasonStartYear: integer("season_start_year"),
+    matchday: integer("matchday"),
+    stage: text("stage"),
+    group: text("group_name"),
+    utcDate: timestamp("utc_date", { withTimezone: true }).notNull(),
+    status: text("status").notNull(),
+    venue: text("venue"),
+    homeTeamId: integer("home_team_id"),
+    homeTeamName: text("home_team_name").notNull(),
+    homeTeamShortName: text("home_team_short_name"),
+    homeTeamCrest: text("home_team_crest"),
+    awayTeamId: integer("away_team_id"),
+    awayTeamName: text("away_team_name").notNull(),
+    awayTeamShortName: text("away_team_short_name"),
+    awayTeamCrest: text("away_team_crest"),
+    winner: text("winner"),
+    homeScore: integer("home_score"),
+    awayScore: integer("away_score"),
+    providerUpdatedAt: timestamp("provider_updated_at", { withTimezone: true }),
+    syncedAt: timestamp("synced_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    competitionDateIdx: index("football_fixtures_competition_date_idx").on(table.competitionKey, table.utcDate),
+    competitionMatchdayIdx: index("football_fixtures_competition_matchday_idx").on(table.competitionKey, table.matchday),
+    statusIdx: index("football_fixtures_status_idx").on(table.status),
+  })
+);
+
+export const footballStandings = pgTable(
+  "football_standings",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    competitionKey: text("competition_key").notNull().references(() => footballCompetitions.key, { onDelete: "cascade" }),
+    seasonStartYear: integer("season_start_year").notNull(),
+    stage: text("stage").notNull(),
+    type: text("type").notNull(),
+    group: text("group_name"),
+    position: integer("position").notNull(),
+    teamId: integer("team_id").notNull(),
+    teamName: text("team_name").notNull(),
+    teamShortName: text("team_short_name"),
+    teamCrest: text("team_crest"),
+    playedGames: integer("played_games").notNull(),
+    form: text("form"),
+    won: integer("won").notNull(),
+    draw: integer("draw").notNull(),
+    lost: integer("lost").notNull(),
+    points: integer("points").notNull(),
+    goalsFor: integer("goals_for").notNull(),
+    goalsAgainst: integer("goals_against").notNull(),
+    goalDifference: integer("goal_difference").notNull(),
+    syncedAt: timestamp("synced_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    uniqueStanding: uniqueIndex("football_standings_unique_row").on(
+      table.competitionKey,
+      table.seasonStartYear,
+      table.stage,
+      table.type,
+      table.teamId
+    ),
+    competitionPositionIdx: index("football_standings_competition_position_idx").on(table.competitionKey, table.position),
+  })
+);
+
+// ---------------------------------------------------------------------------
 // Leagues
 // ---------------------------------------------------------------------------
 

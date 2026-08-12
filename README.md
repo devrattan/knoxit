@@ -71,6 +71,35 @@ After Render provides the API URL, configure and redeploy the Vercel frontend:
 - `VITE_API_BASE_URL=https://knoxit-api.onrender.com` (use the actual URL)
 - `VITE_USE_MOCK_API=false`
 
+### Live football data
+
+The backend caches the current-season fixtures, results, and standings for EPL,
+La Liga, Bundesliga, Serie A, and the Champions League in Neon. Configure these
+Render variables:
+
+- `FOOTBALL_DATA_API_KEY`: your football-data.org v4 token
+- `FOOTBALL_DATA_SYNC_SECRET`: a long random value (the Blueprint generates one)
+
+Run the first sync manually:
+
+```bash
+curl --request POST \
+  --header "x-sync-secret: YOUR_SYNC_SECRET" \
+  https://YOUR-API.onrender.com/api/fixtures/sync
+```
+
+`.github/workflows/sync-football.yml` refreshes the cache hourly. Add these
+GitHub Actions repository secrets before enabling it:
+
+- `BACKEND_SYNC_URL`: the backend origin only, such as `https://knoxit-api.onrender.com`
+- `FOOTBALL_SYNC_SECRET`: the same value as Render's `FOOTBALL_DATA_SYNC_SECRET`
+
+The sync makes ten provider calls (fixtures plus standings for five supported
+competitions), exactly the football-data.org free-plan minute allowance. App
+users read Neon and never call the provider directly. Free-plan scores and
+schedules can be delayed by the provider; true live scores require its live
+scores plan.
+
 Frontend Vercel settings:
 
 - Framework preset: `Vite`

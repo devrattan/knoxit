@@ -22,6 +22,7 @@
 ## Known Product/Backend Blockers
 
 - Neon-backed email/password authentication and opaque cookie sessions are connected. Password reset email delivery is still pending an email provider.
+- Fixtures, results, and standings for the five supported competitions are cached in Neon through a protected football-data.org sync endpoint; the Fixtures screen reads the real cache.
 - Results/elimination cron or webhook is not implemented.
 - Standings data remains a 501 route until the real football-data helper is connected.
 - Real-money chip packs stay disabled until Stripe/IAP integration exists.

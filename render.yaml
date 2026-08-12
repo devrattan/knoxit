@@ -19,3 +19,7 @@ services:
         value: none
       - key: SESSION_TTL_DAYS
         value: 30
+      - key: FOOTBALL_DATA_API_KEY
+        sync: false
+      - key: FOOTBALL_DATA_SYNC_SECRET
+        generateValue: true

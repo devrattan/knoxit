@@ -23,7 +23,7 @@ Last updated: 25 July 2026 · Target launch: 22 Aug 2026 (EPL GW1) — **28 days
 
 ## 1. DATABASE (Neon Postgres)
 
-- ❓ `fixtures` table created in Neon (id, home_team, away_team, matchday, utc_date, status, home_score, away_score) — not present in the current Drizzle schema
+- ✅ `football_competitions`, `football_fixtures`, and `football_standings` tables are defined in Drizzle and covered by migration `0002`
 - ✅ `users` and `auth_sessions` tables — defined in Drizzle with an initial Neon migration
 - ⬜ `leagues` table (league_id, sport, format, entry_fee, vault, gameweek, status) — **vault field must support incremental growth per joiner (decided 22 Jul 2026)**, not a fixed value set at league creation
 - ⬜ `league_members` table (user_id, league_id, status: alive/knocked_out)
@@ -37,8 +37,8 @@ Last updated: 25 July 2026 · Target launch: 22 Aug 2026 (EPL GW1) — **28 days
 ## 2. API / BACKEND (`artifacts/api-server`)
 
 - ✅ Express 5 server scaffolded
-- ✅ `POST /api/fixtures/sync` — pulls from football-data.org and should upsert to Neon
-- ✅ `GET /api/fixtures` — returns stored fixtures
+- ✅ `POST /api/fixtures/sync` — protected sync for EPL, La Liga, Bundesliga, Serie A, and UCL; writes fixtures/results/standings to Neon
+- ✅ `GET /api/fixtures` and `GET /api/fixtures/competitions` — return cached, filterable football data
 - ✅ Drizzle/Postgres database wrapper (`lib/db/src/index.ts`) using `DATABASE_URL`
 - ✅ football-data.org fetch helper — server-side only, key never exposed
 - ✅ Auth endpoints — signup, login, session lookup, and logout with Neon-backed opaque sessions
@@ -48,7 +48,7 @@ Last updated: 25 July 2026 · Target launch: 22 Aug 2026 (EPL GW1) — **28 days
 - ✅ `GET /api/picks/me` — user's picks across all leagues (powers Picks tab), written
 - ✅ `GET /api/leagues/available-teams/:leagueId` — used/available teams for the Pick Submission screen
 - ✅ `GET /api/leagues/:id/messages`, `POST /api/leagues/:id/messages` — authorized league chat history + send; live transport remains pending
-- 🔧 `GET /api/standings/:league` — route scaffolded (`standings.ts`), but the actual football-data.org call is stubbed (501) since it needs your existing `footballData.ts` helper's real export name/signature, which isn't visible from here — quick fix once someone fills in the one marked TODO line
+- ✅ `GET /api/standings/:league` — returns cached current-season standings and calculated last-five form
 - ⬜ Elimination/results engine — cron or webhook that resolves picks after matches complete
 - ⬜ `GET /api/leagues/:id` — league detail / command center data
 - ✅ Shop/chips endpoints — `POST /api/shop/purchase` (featured items + boosters, real, chip-funded), `POST /api/shop/daily-reward/claim`, `GET /api/shop/balance` all done. Real-money chip pack purchase is a stub (`POST /api/shop/chip-packs/:packId/purchase` returns 501) — needs an actual Stripe/IAP integration, not something to fake
