@@ -45,8 +45,9 @@ The current Vercel deployment serves the Vite frontend and proxies `/api`
 through `api/[...path].ts` to the Node backend. Deploy `server/` to a
 Node-compatible service, set its `DATABASE_URL` to Neon, and set Vercel's
 `BACKEND_ORIGIN` to that API origin. Keep `VITE_API_BASE_URL` empty so browser
-requests and the session cookie stay on the frontend origin. This is required
-for reliable authentication in mobile browsers that block third-party cookies.
+requests and the session cookie stay on the frontend origin. Cross-origin
+values are ignored by the client as a safety check because they turn the
+session cookie into a third-party cookie that browsers may block.
 
 ### Render backend
 

@@ -31,9 +31,10 @@ function readCookie(req: Request, name: string) {
 }
 
 export function setSessionCookie(res: Response, token: string, expiresAt: Date) {
+  const maxAge = Math.max(0, Math.floor((expiresAt.getTime() - Date.now()) / 1000));
   res.setHeader(
     "Set-Cookie",
-    `${SESSION_COOKIE}=${encodeURIComponent(token)}; ${cookieAttributes()}; Expires=${expiresAt.toUTCString()}`
+    `${SESSION_COOKIE}=${encodeURIComponent(token)}; ${cookieAttributes()}; Max-Age=${maxAge}; Expires=${expiresAt.toUTCString()}`
   );
 }
 

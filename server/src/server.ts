@@ -31,9 +31,16 @@ export function createServer() {
   app.use(express.json());
 
   app.get("/health", (_req, res) => res.json({ ok: true }));
+  app.use("/api/auth", (_req, res, next) => {
+    res.setHeader("Cache-Control", "no-store");
+    next();
+  });
   app.use("/api/auth", authRouter);
   app.use("/api/fixtures", fixturesRouter);
-  app.get("/api/session", attachUser, (req, res) => res.json({ user: req.authUser }));
+  app.get("/api/session", (req, res, next) => {
+    res.setHeader("Cache-Control", "no-store");
+    next();
+  }, attachUser, (req, res) => res.json({ user: req.authUser }));
 
   app.use("/api/account", attachUser, accountRouter);
   app.use("/api/friends-leagues", attachUser, friendsLeaguesRouter);

@@ -6,12 +6,16 @@ import {
   myAdminLeagueRequests,
   publicFriendsLeagues
 } from "../../lib/mockData";
+import { resolveApiBaseUrl } from "./baseUrl";
 
 // Keep browser requests on the app origin by default. Vite proxies /api during
 // development and the Vercel function does the same in production. Apart from
 // avoiding third-party-cookie restrictions, this also prevents a phone opened
 // against the laptop's dev server from treating "localhost" as the phone.
-const apiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim() || "";
+const apiBaseUrl = resolveApiBaseUrl(
+  import.meta.env.VITE_API_BASE_URL,
+  window.location.origin
+);
 const useMockApi = import.meta.env.VITE_USE_MOCK_API === "true";
 
 export type SessionUser = {
