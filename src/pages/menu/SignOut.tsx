@@ -3,7 +3,7 @@ import { LogOut } from "lucide-react";
 import { useAppDispatch } from "../../app/hooks";
 import { SubHeader } from "../../components/Header";
 import { signedOut } from "../../features/auth/authSlice";
-import { useLogoutMutation } from "../../services/api/knoxitApi";
+import { knoxitApi, useLogoutMutation } from "../../services/api/knoxitApi";
 
 export default function SignOut() {
   const dispatch = useAppDispatch();
@@ -15,6 +15,7 @@ export default function SignOut() {
       await logout().unwrap();
     } finally {
       dispatch(signedOut());
+      dispatch(knoxitApi.util.resetApiState());
       setLocation("/login");
     }
   };

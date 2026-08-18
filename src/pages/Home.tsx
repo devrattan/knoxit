@@ -1,14 +1,75 @@
 // artifacts/knoxit/src/pages/Home.tsx
+import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { Shield, Clock, Radio, Coins, ChevronRight, ChevronRightCircle, Plus, KeyRound } from "lucide-react";
 import { Header } from "../components/Header";
 import { BottomNav } from "../components/BottomNav";
-import { joinLeagues, friendsLeagues, dashboardStats, accentMap, initialsFor } from "../services/mockData";
+import { friendsLeagues, dashboardStats } from "../services/mockData";
+import { normalizeApiError } from "../services/api/error";
+import {
+  type CompetitiveLeagueCard,
+  useGetChipBalanceQuery,
+  useGetCompetitiveLeaguesQuery,
+  useJoinCompetitionMutation,
+} from "../services/api/knoxitApi";
 
 const iconMap = { Shield, Clock, Radio, Coins };
 
+function competitionInitials(name: string) {
+  return name.split(" ").slice(0, 2).map((word) => word[0]).join("").toUpperCase();
+}
+
+function lockLabel(locksAt: string | null, now: number) {
+  if (!locksAt) return "Not open";
+  const milliseconds = new Date(locksAt).getTime() - now;
+  if (milliseconds <= 0) return "Locked";
+  const minutes = Math.ceil(milliseconds / 60_000);
+  if (minutes < 60) return `Locks in ${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `Locks in ${hours}h ${minutes % 60}m`;
+  return `Locks in ${Math.floor(hours / 24)}d ${hours % 24}h`;
+}
+
 export default function Home() {
   const [, setLocation] = useLocation();
+  const competitionsQuery = useGetCompetitiveLeaguesQuery();
+  const balanceQuery = useGetChipBalanceQuery();
+  const [joinCompetition, joinState] = useJoinCompetitionMutation();
+  const [joiningKey, setJoiningKey] = useState<string | null>(null);
+  const [joinError, setJoinError] = useState<string | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+  const joinRequestKeys = useRef(new Map<string, string>());
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const join = async (competition: CompetitiveLeagueCard) => {
+    if (!competition.available || competition.startingRound === null) return;
+    setJoinError(null);
+    setJoiningKey(competition.competitionKey);
+    const requestKey = joinRequestKeys.current.get(competition.competitionKey) ?? crypto.randomUUID();
+    joinRequestKeys.current.set(competition.competitionKey, requestKey);
+
+    try {
+      const result = await joinCompetition({
+        competitionKey: competition.competitionKey,
+        startingRound: competition.startingRound,
+        idempotencyKey: requestKey,
+      }).unwrap();
+      joinRequestKeys.current.delete(competition.competitionKey);
+      setLocation(`/leagues/${result.league.id}`);
+    } catch (requestError) {
+      const normalized = normalizeApiError(requestError);
+      if (typeof normalized.status === "number" && normalized.status < 500) {
+        joinRequestKeys.current.delete(competition.competitionKey);
+      }
+      setJoinError(normalized.message);
+    } finally {
+      setJoiningKey(null);
+    }
+  };
 
   return (
     <>
@@ -21,30 +82,63 @@ export default function Home() {
             View All Leagues <ChevronRight size={12} />
           </button>
         </div>
-        <div className="pl-4 flex gap-3 overflow-x-auto no-scrollbar pb-1">
-          {joinLeagues.map((l) => {
-            const a = accentMap[l.accent];
+        {joinError ? (
+          <div className="mx-4 mb-2 rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-[10px] text-red-300">
+            {joinError}
+          </div>
+        ) : null}
+        <div className="scroll-smooth snap-x pl-4 flex gap-3 overflow-x-auto no-scrollbar pb-1">
+          {competitionsQuery.isLoading ? (
+            <div className="flex h-[165px] w-[135px] shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] text-[10px] text-zinc-500">
+              Loading…
+            </div>
+          ) : null}
+          {competitionsQuery.data?.slice(0, 5).map((competition) => {
+            const availableBalance = balanceQuery.data?.balance;
+            const shortfall = availableBalance === undefined
+              ? 0
+              : Math.max(0, competition.entryFeeChips - availableBalance);
+            const hasInsufficientChips = shortfall > 0;
+            const isJoining = joinState.isLoading && joiningKey === competition.competitionKey;
+            const hotThreshold = Math.max(5, Math.ceil(competition.maxMembersPerCohort * 0.75));
+            const isHot = competition.joinedEntries >= hotThreshold;
             return (
-              <div key={l.id} className={`shrink-0 w-[135px] bg-white/[0.03] border ${a.border} rounded-xl p-3 relative`}>
-                {l.hot && (
+              <div key={competition.competitionKey} className="snap-start relative w-[145px] shrink-0 rounded-xl border border-emerald-500/30 bg-white/[0.03] p-3">
+                {isHot && (
                   <span className="absolute top-2 right-2 text-[8px] font-bold text-emerald-400 border border-emerald-500/40 rounded-full px-1.5 py-0.5">HOT</span>
                 )}
                 <div className="w-9 h-9 rounded-full bg-white flex items-center justify-center text-[9px] font-bold text-zinc-900 mb-2">
-                  {initialsFor(l.name)}
+                  {competition.emblem ? <img src={competition.emblem} alt="" className="h-7 w-7 object-contain" /> : competitionInitials(competition.name)}
                 </div>
-                <div className="text-white text-[13px] font-semibold leading-tight">{l.name}</div>
-                <div className="text-white text-[13px] font-semibold leading-tight mb-2">{l.sub}</div>
-                <div className="text-zinc-500 text-[10px] mb-1">{l.gw}</div>
-                <div className={`flex items-center gap-1 text-[10px] font-medium mb-2.5 ${a.text}`}>
-                  <Clock size={10} /> {l.locks}
+                <div className="line-clamp-2 min-h-8 text-[12px] font-semibold leading-tight text-white">{competition.name} Survivor</div>
+                <div className="mt-1 text-[9px] text-zinc-500">
+                  {competition.startingRound === null ? "No open round" : `Starts GW${competition.startingRound}`}
                 </div>
-                {/* TODO: wire to POST /api/leagues/:id/join */}
-                <button className={`w-full text-center rounded-lg py-1.5 text-[11px] font-bold border ${a.btn}`}>
-                  Join Now
+                <div className="mb-1.5 mt-1 flex items-center gap-1 text-[9px] font-medium text-emerald-400">
+                  <Clock size={9} /> {lockLabel(competition.locksAt, now)}
+                </div>
+                <div className="mb-2 flex items-center gap-1 text-[9px] text-amber-300">
+                  <Coins size={9} /> {competition.entryFeeChips === 0 ? "Free" : `${competition.entryFeeChips.toLocaleString()} chips`}
+                </div>
+                {hasInsufficientChips ? <div className="mb-1 text-[8px] text-red-300">Need {shortfall.toLocaleString()} more</div> : null}
+                <button
+                  onClick={() => join(competition)}
+                  disabled={!competition.available || joinState.isLoading || balanceQuery.isLoading || hasInsufficientChips}
+                  className="w-full rounded-lg border border-emerald-500/30 bg-emerald-500/15 py-1.5 text-center text-[10px] font-bold text-emerald-400 disabled:border-white/10 disabled:bg-white/5 disabled:text-zinc-600"
+                >
+                  {isJoining ? "Joining…" : hasInsufficientChips ? "Not enough" : "Join Now"}
                 </button>
               </div>
             );
           })}
+          {competitionsQuery.isError ? (
+            <button
+              onClick={() => competitionsQuery.refetch()}
+              className="flex h-[165px] w-[145px] shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] px-3 text-center text-[10px] text-zinc-400"
+            >
+              Could not load leagues. Tap to retry.
+            </button>
+          ) : null}
           <div className="shrink-0 w-2" />
         </div>
 

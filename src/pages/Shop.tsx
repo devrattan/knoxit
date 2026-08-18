@@ -31,7 +31,8 @@ import { useState } from "react";
 import { Coins, Gift, Zap, Eye, Clock, Check, Equal, RotateCcw, PlayCircle, Lock, BarChart3 } from "lucide-react";
 import { Header } from "../components/Header";
 import { BottomNav } from "../components/BottomNav";
-import { chipBalance, dailyReward, boosterItems, chipPacks, adsRequiredFor, merchTeasers } from "../services/mockData";
+import { dailyReward, boosterItems, chipPacks, adsRequiredFor, merchTeasers } from "../services/mockData";
+import { useGetChipBalanceQuery } from "../services/api/knoxitApi";
 
 const iconMap: Record<string, any> = { Zap, Eye, Clock, Equal, RotateCcw, BarChart3 };
 
@@ -111,25 +112,22 @@ function MerchCard({ item, featured }: { item: (typeof merchTeasers)[number]; fe
 }
 
 export default function Shop() {
-  const [balance, setBalance] = useState(chipBalance);
+  const balanceQuery = useGetChipBalanceQuery();
+  const balance = balanceQuery.data?.balance ?? 0;
   const [tab, setTab] = useState<"boosters" | "merch">("boosters");
-  const [claimed, setClaimed] = useState(dailyReward.claimedToday);
+  const claimed = dailyReward.claimedToday;
   const [purchaseMsg, setPurchaseMsg] = useState<string | null>(null);
   const [adProgress, setAdProgress] = useState<Record<string, number>>({});
 
   const claimDaily = () => {
     if (claimed) return;
-    // TODO: replace with POST /api/shop/daily-reward/claim
-    setBalance((b) => b + dailyReward.amount);
-    setClaimed(true);
+    setPurchaseMsg("Daily rewards are coming after the closed beta");
+    setTimeout(() => setPurchaseMsg(null), 2000);
   };
 
   const purchase = (item: Item) => {
     if (balance < item.cost) return;
-    // TODO: replace with POST /api/shop/purchase { itemId: item.id }
-    // (or the dedicated draw-shield/team-recall/league-pulse activate routes)
-    setBalance((b) => b - item.cost);
-    setPurchaseMsg(`${item.name} purchased!`);
+    setPurchaseMsg(`${item.name} is coming after the closed beta`);
     setTimeout(() => setPurchaseMsg(null), 2000);
   };
 

@@ -57,6 +57,7 @@ create a Blueprint from this repository and provide:
 
 - `DATABASE_URL`: the pooled Neon connection string
 - `APP_ORIGIN`: the exact Vercel frontend URL, with no trailing slash
+- `BETA_STARTING_CHIPS`: fixed closed-beta signup allocation (default `1000`)
 
 The Blueprint starts on Render's free instance for testing. Free instances
 sleep after inactivity, so upgrade the service before production. The free

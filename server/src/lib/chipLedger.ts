@@ -8,6 +8,9 @@
 import { db } from "@db/index"; // adjust to your actual db export path
 import { users, chipLedger } from "@db/schema";
 import { eq } from "drizzle-orm";
+import { InsufficientChipsError } from "./chipErrors";
+
+export { InsufficientChipsError } from "./chipErrors";
 
 type ChipTransactionType =
   | "signup_bonus"
@@ -29,13 +32,6 @@ type ChipTransactionParams = {
   amount: number;
   note?: string;
 };
-
-export class InsufficientChipsError extends Error {
-  constructor() {
-    super("Insufficient chip balance");
-    this.name = "InsufficientChipsError";
-  }
-}
 
 /**
  * Applies a chip transaction atomically: updates the user's balance and
@@ -67,7 +63,9 @@ export async function applyChipTransactionInTransaction(
   if (!user) throw new Error(`User ${userId} not found`);
 
   const newBalance = user.chipBalance + amount;
-  if (newBalance < 0) throw new InsufficientChipsError();
+  if (newBalance < 0) {
+    throw new InsufficientChipsError(user.chipBalance, Math.abs(amount));
+  }
 
   await tx.update(users).set({ chipBalance: newBalance }).where(eq(users.id, userId));
 

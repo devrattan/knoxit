@@ -14,6 +14,18 @@ Included task numbers:
 
 `#2, #3, #11-16, #18, #21, #22, #24, #42, #45-53, #59, #62, #67, #68, #79-82, #89-91, #104, #109-112`
 
+## Implementation progress
+
+### 19 August 2026
+
+- Implemented the account/session and beta-wallet foundation for #11-16, #18, #68, and #91.
+- Signup now atomically creates the account, 1,000-chip starting allocation, signup ledger entry, and initial session.
+- Login/session routing uses the same-origin mobile-safe API path; logout clears private API cache.
+- Implemented the code path for #2, #3, and #22: real Home/Explore competition discovery, live lock labels, HOT state, server-backed Join Now, retry-safe idempotency, atomic membership/fee/vault update, and exact insufficient-chip feedback.
+- Real chip balance is now shown from the same API source in the global header, Explore, and Shop.
+- Verification: web and server typechecks, ESLint, 20 automated tests, production build, and `git diff --check` pass.
+- Still required before these tasks are accepted as production-complete: apply migrations/configuration in the target environment and execute the fresh-account/mobile/database smoke flow.
+
 ## End-to-end journey
 
 ```text
@@ -104,4 +116,3 @@ For a fixture postponed after lock, picks remain locked and the outcome stays pe
 - Notifications
 - Advanced statistics and history
 - Broad performance, device, and accessibility certification
-

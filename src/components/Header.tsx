@@ -2,9 +2,11 @@
 import { useState } from "react";
 import { Menu, Bell, Coins } from "lucide-react";
 import { Drawer } from "./Drawer";
+import { useGetChipBalanceQuery } from "../services/api/knoxitApi";
 
 export function Header({ betaLabel = "BETA" }: { betaLabel?: string }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const balanceQuery = useGetChipBalanceQuery();
 
   return (
     <>
@@ -22,8 +24,13 @@ export function Header({ betaLabel = "BETA" }: { betaLabel?: string }) {
           <Bell size={18} className="text-zinc-300" />
           <div className="flex items-center gap-1 bg-amber-500/10 border border-amber-500/30 rounded-full px-2 py-1">
             <Coins size={12} className="text-amber-400" />
-            {/* TODO: replace with real chip balance from useUserChipBalance() hook */}
-            <span className="text-amber-400 text-[11px] font-bold">6,200</span>
+            <span
+              className="text-amber-400 text-[11px] font-bold tabular-nums"
+              aria-label={balanceQuery.isLoading ? "Loading chip balance" : "Chip balance"}
+              title={balanceQuery.isError ? "Chip balance unavailable" : undefined}
+            >
+              {balanceQuery.data ? balanceQuery.data.balance.toLocaleString() : balanceQuery.isLoading ? "…" : "—"}
+            </span>
           </div>
         </div>
       </div>

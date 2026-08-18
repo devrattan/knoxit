@@ -332,7 +332,13 @@ leaguesRouter.post("/join-competition", async (req, res, next) => {
     });
   } catch (error) {
     if (error instanceof InsufficientChipsError) {
-      return res.status(400).json({ error: "Not enough chips to cover the entry fee" });
+      return res.status(400).json({
+        error: `You need ${error.required.toLocaleString()} chips. Your balance is ${error.available.toLocaleString()} chips.`,
+        code: "INSUFFICIENT_CHIPS",
+        required: error.required,
+        available: error.available,
+        shortfall: error.shortfall,
+      });
     }
     if (error instanceof Error && error.message === "ROUND_LOCKED") {
       return res.status(409).json({ error: "Entry for this round is locked" });

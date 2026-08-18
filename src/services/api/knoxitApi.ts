@@ -208,7 +208,7 @@ export const knoxitApi = createApi({
       query: (body) => ({ url: "/api/auth/login", method: "POST", body }),
       invalidatesTags: ["Session"]
     }),
-    signup: builder.mutation<{ user: SessionUser }, { username: string; email: string; password: string }>({
+    signup: builder.mutation<{ user: SessionUser; balance: number }, { username: string; email: string; password: string }>({
       query: (body) => ({ url: "/api/auth/signup", method: "POST", body }),
       invalidatesTags: ["Session"]
     }),

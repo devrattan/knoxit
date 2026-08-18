@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { Router } from "express";
 import { eq, or } from "drizzle-orm";
 import { db } from "@db/index";
-import { authSessions, users } from "@db/schema";
+import { authSessions, chipLedger, users } from "@db/schema";
 import { loginSchema, signupSchema } from "@api-zod/knoxit-schemas";
 import {
   clearSessionCookie,
@@ -12,6 +12,7 @@ import {
   setSessionCookie,
 } from "../middleware/auth";
 import { hashPassword, verifyPassword } from "../lib/password";
+import { getBetaStartingChips } from "../lib/betaChips";
 
 export const authRouter = Router();
 
@@ -33,6 +34,13 @@ async function createSession(userId: string) {
     expiresAt,
   });
   return { token, expiresAt };
+}
+
+function newSession() {
+  return {
+    token: randomBytes(32).toString("base64url"),
+    expiresAt: new Date(Date.now() + sessionTtlMs()),
+  };
 }
 
 async function createReferralCode() {
@@ -71,14 +79,37 @@ authRouter.post("/signup", async (req, res, next) => {
 
     const passwordHash = await hashPassword(parsed.data.password);
     const referralCode = await createReferralCode();
-    const [user] = await db
-      .insert(users)
-      .values({ email, passwordHash, username, referralCode })
-      .returning({ id: users.id, email: users.email, username: users.username });
+    const startingChips = getBetaStartingChips();
+    const session = newSession();
 
-    const session = await createSession(user.id);
+    // Account, beta wallet balance, auditable signup credit, and the first
+    // session either all commit or all roll back. Database uniqueness on email
+    // and username keeps concurrent/retried signup attempts to one account.
+    const user = await db.transaction(async (tx) => {
+      const [createdUser] = await tx
+        .insert(users)
+        .values({ email, passwordHash, username, referralCode, chipBalance: startingChips })
+        .returning({ id: users.id, email: users.email, username: users.username });
+
+      await tx.insert(chipLedger).values({
+        userId: createdUser.id,
+        type: "signup_bonus",
+        amount: startingChips,
+        balanceAfter: startingChips,
+        note: "Closed beta starting allocation",
+      });
+
+      await tx.insert(authSessions).values({
+        tokenHash: hashSessionToken(session.token),
+        userId: createdUser.id,
+        expiresAt: session.expiresAt,
+      });
+
+      return createdUser;
+    });
+
     setSessionCookie(res, session.token, session.expiresAt);
-    return res.status(201).json({ user });
+    return res.status(201).json({ user, balance: startingChips });
   } catch (error) {
     if (isUniqueViolation(error)) return res.status(409).json({ error: "Email or username already exists" });
     next(error);
