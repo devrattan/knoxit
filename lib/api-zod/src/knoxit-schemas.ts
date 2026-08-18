@@ -67,6 +67,13 @@ export const joinLeagueSchema = z.object({
 });
 export type JoinLeagueInput = z.infer<typeof joinLeagueSchema>;
 
+export const joinCompetitionSchema = z.object({
+  competitionKey: z.string().trim().min(1).max(40),
+  startingRound: z.number().int().positive(),
+  idempotencyKey: z.string().uuid(),
+});
+export type JoinCompetitionInput = z.infer<typeof joinCompetitionSchema>;
+
 export const leagueDetailResponseSchema = z.object({
   id: z.string().uuid(),
   code: z.string(),

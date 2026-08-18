@@ -7,7 +7,11 @@ import {
   publicFriendsLeagues
 } from "../../lib/mockData";
 
-const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || (import.meta.env.DEV ? "http://localhost:4000" : "");
+// Keep browser requests on the app origin by default. Vite proxies /api during
+// development and the Vercel function does the same in production. Apart from
+// avoiding third-party-cookie restrictions, this also prevents a phone opened
+// against the laptop's dev server from treating "localhost" as the phone.
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim() || "";
 const useMockApi = import.meta.env.VITE_USE_MOCK_API === "true";
 
 export type SessionUser = {
@@ -67,6 +71,51 @@ export type FootballStanding = {
   goalDifference: number;
 };
 
+export type CompetitiveLeagueCard = {
+  competitionKey: string;
+  name: string;
+  emblem: string | null;
+  seasonStartYear: number | null;
+  startingRound: number | null;
+  locksAt: string | null;
+  entryFeeChips: number;
+  maxMembersPerCohort: number;
+  joinedEntries: number;
+  available: boolean;
+  unavailableReason: string | null;
+};
+
+export type MyLeague = {
+  id: string;
+  code: string;
+  name: string;
+  type: "competitive" | "friends";
+  status: "upcoming" | "active" | "completed" | "split";
+  competitionKey: string | null;
+  currentGameweek: number;
+  startingRound: number | null;
+  locksAt: string | null;
+  vaultChips: number;
+  maxMembers: number | null;
+  memberStatus: "alive" | "knocked_out";
+};
+
+export type JoinCompetitionResponse = {
+  joined: true;
+  replayed: boolean;
+  balanceAfter?: number;
+  league: {
+    id: string;
+    code: string;
+    name: string;
+    competitionKey: string;
+    seasonStartYear: number;
+    startingRound: number;
+    instanceNumber: number;
+    locksAt: string;
+  };
+};
+
 type MockArgs = string | { url: string; method?: string; body?: any };
 
 async function mockBaseQuery(args: MockArgs) {
@@ -80,7 +129,42 @@ async function mockBaseQuery(args: MockArgs) {
     return { data: { user: { id: "demo-user", email: request.body?.email, username: request.body?.username ?? "you" } } };
   }
   if (request.url === "/api/auth/logout") return { data: undefined };
-  if (request.url === "/api/leagues") return { data: allLeagues };
+  if (request.url === "/api/leagues/mine") return { data: [] };
+  if (request.url === "/api/leagues/competitions") {
+    return {
+      data: allLeagues.slice(0, 5).map((league, index) => ({
+        competitionKey: ["epl", "la_liga", "bundesliga", "ucl", "serie_a"][index],
+        name: league.name.replace(" Survivor", ""),
+        emblem: null,
+        seasonStartYear: 2026,
+        startingRound: Number(league.gw.replace(/\D/g, "")) || 1,
+        locksAt: new Date(Date.now() + (index + 2) * 60 * 60 * 1000).toISOString(),
+        entryFeeChips: 0,
+        maxMembersPerCohort: 20,
+        joinedEntries: league.joined,
+        available: true,
+        unavailableReason: null
+      }))
+    };
+  }
+  if (request.url === "/api/leagues/join-competition" && request.method === "POST") {
+    return {
+      data: {
+        joined: true,
+        replayed: false,
+        league: {
+          id: crypto.randomUUID(),
+          code: "DEMO-1",
+          name: "Demo Survivor",
+          competitionKey: request.body.competitionKey,
+          seasonStartYear: 2026,
+          startingRound: request.body.startingRound,
+          instanceNumber: 1,
+          locksAt: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString()
+        }
+      }
+    };
+  }
   if (request.url === "/api/friends-leagues/public") return { data: publicFriendsLeagues };
   if (request.url === "/api/friends-leagues/requests/mine") return { data: myAdminLeagueRequests };
   if (request.url === "/api/shop/balance") return { data: { balance: chipBalance } };
@@ -128,12 +212,24 @@ export const knoxitApi = createApi({
       query: () => ({ url: "/api/auth/logout", method: "POST" }),
       invalidatesTags: ["Session"]
     }),
-    getLeagues: builder.query<any[], void>({
-      query: () => "/api/leagues",
+    getLeagues: builder.query<MyLeague[], void>({
+      query: () => "/api/leagues/mine",
       providesTags: ["League"]
     }),
     joinLeague: builder.mutation<{ joined: boolean }, string>({
       query: (id) => ({ url: `/api/leagues/${id}/join`, method: "POST" }),
+      invalidatesTags: ["League", "Shop"]
+    }),
+    getCompetitiveLeagues: builder.query<CompetitiveLeagueCard[], void>({
+      query: () => "/api/leagues/competitions",
+      providesTags: ["League"]
+    }),
+    joinCompetition: builder.mutation<JoinCompetitionResponse, {
+      competitionKey: string;
+      startingRound: number;
+      idempotencyKey: string;
+    }>({
+      query: (body) => ({ url: "/api/leagues/join-competition", method: "POST", body }),
       invalidatesTags: ["League", "Shop"]
     }),
     getPublicFriendsLeagues: builder.query<any[], void>({
@@ -178,6 +274,8 @@ export const {
   useLogoutMutation,
   useGetLeaguesQuery,
   useJoinLeagueMutation,
+  useGetCompetitiveLeaguesQuery,
+  useJoinCompetitionMutation,
   useGetPublicFriendsLeaguesQuery,
   useRequestFriendsLeagueMutation,
   useJoinByCodeMutation,

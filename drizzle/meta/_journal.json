@@ -22,6 +22,13 @@
       "when": 1786558205130,
       "tag": "0002_flimsy_dakota_north",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1786964223727,
+      "tag": "0003_legal_synch",
+      "breakpoints": true
     }
   ]
 }

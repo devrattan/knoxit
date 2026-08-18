@@ -41,12 +41,12 @@ Keep the frontend and backend in this repository. `src/` is the Vite web app,
 `server/` is the Express API, and `lib/` contains shared database/API contracts.
 They can still be deployed as two services from the same repository.
 
-The current `vercel.json` deploys only the Vite frontend. Deploy `server/` to a
-Node-compatible service, set its `DATABASE_URL` to Neon, and set
-`VITE_API_BASE_URL` to that API origin when building the frontend.
-For cookie authentication, expose both services through the same site (for
-example `app.knoxit.com` and `api.knoxit.com`) or reverse-proxy `/api` through
-the frontend domain.
+The current Vercel deployment serves the Vite frontend and proxies `/api`
+through `api/[...path].ts` to the Node backend. Deploy `server/` to a
+Node-compatible service, set its `DATABASE_URL` to Neon, and set Vercel's
+`BACKEND_ORIGIN` to that API origin. Keep `VITE_API_BASE_URL` empty so browser
+requests and the session cookie stay on the frontend origin. This is required
+for reliable authentication in mobile browsers that block third-party cookies.
 
 ### Render backend
 
@@ -62,13 +62,13 @@ configuration runs pending Drizzle migrations during startup; after upgrading,
 move `npm run db:migrate` to Render's Pre-Deploy Command and change the Start
 Command to `npm run start:api`.
 
-While frontend and API use `vercel.app` and `onrender.com` hostnames, leave
-`COOKIE_SAME_SITE=none`. After assigning related custom domains such as
-`app.knoxit.com` and `api.knoxit.com`, change it to `lax`.
+Because the browser reaches the backend through the same-origin `/api` proxy,
+leave `COOKIE_SAME_SITE=lax`.
 
 After Render provides the API URL, configure and redeploy the Vercel frontend:
 
-- `VITE_API_BASE_URL=https://knoxit-api.onrender.com` (use the actual URL)
+- `BACKEND_ORIGIN=https://knoxit-api.onrender.com` (use the actual URL)
+- `VITE_API_BASE_URL=` (empty, or remove the variable)
 - `VITE_USE_MOCK_API=false`
 
 ### Live football data
@@ -106,7 +106,8 @@ Frontend Vercel settings:
 - Build command: `npm run build`
 - Output directory: `dist`
 - `VITE_USE_MOCK_API=false`
-- `VITE_API_BASE_URL=https://your-api.example.com`
+- `VITE_API_BASE_URL=` (empty, or remove the variable)
+- `BACKEND_ORIGIN=https://your-api.example.com`
 
 `vercel.json` includes an SPA rewrite so protected and nested routes keep working when users refresh a page.
 

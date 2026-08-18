@@ -4,20 +4,346 @@
 // attaches `req.userId` before this router runs.
 
 import { Router } from "express";
-import { eq, and, count, sql } from "drizzle-orm";
+import { eq, and, asc, count, max, sql } from "drizzle-orm";
 import { db } from "@db/index";
-import { leagues, leagueMembers } from "@db/schema";
+import { footballCompetitions, footballFixtures, leagues, leagueMembers } from "@db/schema";
 import {
   createLeagueSchema,
+  joinCompetitionSchema,
   joinLeagueSchema,
 } from "@api-zod/knoxit-schemas";
-import { applyChipTransaction, InsufficientChipsError } from "../lib/chipLedger";
+import {
+  applyChipTransaction,
+  applyChipTransactionInTransaction,
+  InsufficientChipsError,
+} from "../lib/chipLedger";
 
 export const leaguesRouter = Router();
+const ROUND_LOCK_BUFFER_MS = 60 * 60 * 1000;
+
+function firstOpenRound(fixtures: Array<{ matchday: number | null; utcDate: Date }>, now = new Date()) {
+  const firstKickoffByRound = new Map<number, Date>();
+  for (const fixture of fixtures) {
+    if (fixture.matchday === null) continue;
+    const current = firstKickoffByRound.get(fixture.matchday);
+    if (!current || fixture.utcDate < current) firstKickoffByRound.set(fixture.matchday, fixture.utcDate);
+  }
+
+  return [...firstKickoffByRound.entries()]
+    .map(([startingRound, firstKickoff]) => ({
+      startingRound,
+      firstKickoff,
+      locksAt: new Date(firstKickoff.getTime() - ROUND_LOCK_BUFFER_MS),
+    }))
+    .filter((round) => round.locksAt > now)
+    .sort((left, right) => left.firstKickoff.getTime() - right.firstKickoff.getTime())[0] ?? null;
+}
+
+async function getRoundTiming(competitionKey: string, seasonStartYear: number, startingRound: number) {
+  const fixtures = await db
+    .select({ utcDate: footballFixtures.utcDate })
+    .from(footballFixtures)
+    .where(and(
+      eq(footballFixtures.competitionKey, competitionKey),
+      eq(footballFixtures.seasonStartYear, seasonStartYear),
+      eq(footballFixtures.matchday, startingRound)
+    ))
+    .orderBy(asc(footballFixtures.utcDate));
+
+  const firstKickoff = fixtures[0]?.utcDate;
+  return firstKickoff
+    ? { firstKickoff, locksAt: new Date(firstKickoff.getTime() - ROUND_LOCK_BUFFER_MS) }
+    : null;
+}
 
 // ---------------------------------------------------------------------------
-// POST /api/leagues — create a league (competitive admin tool, or a user
-// creating a Friends League)
+// GET /api/leagues/competitions — one Explore card per real competition.
+// Internal 20-player cohort instances intentionally stay hidden here.
+// ---------------------------------------------------------------------------
+
+leaguesRouter.get("/competitions", async (_req, res) => {
+  const competitions = await db
+    .select()
+    .from(footballCompetitions)
+    .where(eq(footballCompetitions.competitiveEnabled, true))
+    .orderBy(asc(footballCompetitions.name));
+
+  const cards = await Promise.all(competitions.map(async (competition) => {
+    if (competition.seasonStartYear === null) {
+      return {
+        competitionKey: competition.key,
+        name: competition.name,
+        emblem: competition.emblem,
+        seasonStartYear: null,
+        startingRound: null,
+        locksAt: null,
+        entryFeeChips: competition.competitiveEntryFeeChips,
+        maxMembersPerCohort: competition.competitiveMaxMembers,
+        joinedEntries: 0,
+        available: false,
+        unavailableReason: "Season data has not been synced yet",
+      };
+    }
+
+    const fixtureRows = await db
+      .select({ matchday: footballFixtures.matchday, utcDate: footballFixtures.utcDate })
+      .from(footballFixtures)
+      .where(and(
+        eq(footballFixtures.competitionKey, competition.key),
+        eq(footballFixtures.seasonStartYear, competition.seasonStartYear)
+      ));
+    const round = firstOpenRound(fixtureRows);
+
+    if (!round) {
+      return {
+        competitionKey: competition.key,
+        name: competition.name,
+        emblem: competition.emblem,
+        seasonStartYear: competition.seasonStartYear,
+        startingRound: null,
+        locksAt: null,
+        entryFeeChips: competition.competitiveEntryFeeChips,
+        maxMembersPerCohort: competition.competitiveMaxMembers,
+        joinedEntries: 0,
+        available: false,
+        unavailableReason: "No future round is open for entry",
+      };
+    }
+
+    const [{ joinedEntries }] = await db
+      .select({ joinedEntries: count(leagueMembers.userId) })
+      .from(leagues)
+      .leftJoin(leagueMembers, eq(leagueMembers.leagueId, leagues.id))
+      .where(and(
+        eq(leagues.type, "competitive"),
+        eq(leagues.competitionKey, competition.key),
+        eq(leagues.seasonStartYear, competition.seasonStartYear),
+        eq(leagues.startingRound, round.startingRound)
+      ));
+
+    return {
+      competitionKey: competition.key,
+      name: competition.name,
+      emblem: competition.emblem,
+      seasonStartYear: competition.seasonStartYear,
+      startingRound: round.startingRound,
+      locksAt: round.locksAt,
+      entryFeeChips: competition.competitiveEntryFeeChips,
+      maxMembersPerCohort: competition.competitiveMaxMembers,
+      joinedEntries,
+      available: true,
+      unavailableReason: null,
+    };
+  }));
+
+  res.json(cards);
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/leagues/join-competition — atomically find or create a 20-player
+// cohort, charge its entry fee, grow its vault and add the membership.
+// ---------------------------------------------------------------------------
+
+leaguesRouter.post("/join-competition", async (req, res, next) => {
+  const parsed = joinCompetitionSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: "Invalid competition join", details: parsed.error.flatten() });
+  }
+
+  const userId = req.userId as string;
+  const { competitionKey, startingRound, idempotencyKey } = parsed.data;
+
+  try {
+    // A completed request remains replayable even if its round has since
+    // locked or the provider has rolled over to a new season.
+    const [previousJoin] = await db
+      .select({ league: leagues })
+      .from(leagueMembers)
+      .innerJoin(leagues, eq(leagueMembers.leagueId, leagues.id))
+      .where(and(
+        eq(leagueMembers.userId, userId),
+        eq(leagueMembers.joinRequestKey, idempotencyKey)
+      ));
+    if (previousJoin) {
+      return res.json({
+        joined: true,
+        replayed: true,
+        league: {
+          id: previousJoin.league.id,
+          code: previousJoin.league.code,
+          name: previousJoin.league.name,
+          competitionKey: previousJoin.league.competitionKey,
+          seasonStartYear: previousJoin.league.seasonStartYear,
+          startingRound: previousJoin.league.startingRound,
+          instanceNumber: previousJoin.league.instanceNumber,
+          locksAt: previousJoin.league.locksAt,
+        },
+      });
+    }
+
+    const [competition] = await db
+      .select()
+      .from(footballCompetitions)
+      .where(eq(footballCompetitions.key, competitionKey));
+    if (!competition || !competition.competitiveEnabled) {
+      return res.status(404).json({ error: "Competition is not available" });
+    }
+    if (competition.seasonStartYear === null) {
+      return res.status(409).json({ error: "Competition season data has not been synced yet" });
+    }
+
+    const timing = await getRoundTiming(competitionKey, competition.seasonStartYear, startingRound);
+    if (!timing) return res.status(409).json({ error: "Fixtures for this round have not been synced" });
+    if (timing.locksAt <= new Date()) return res.status(409).json({ error: "Entry for this round is locked" });
+
+    const result = await db.transaction(async (tx) => {
+      // Serialize retries first, then allocation for this competition round.
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`join:${userId}:${idempotencyKey}`}))`);
+
+      const [replayed] = await tx
+        .select({ league: leagues })
+        .from(leagueMembers)
+        .innerJoin(leagues, eq(leagueMembers.leagueId, leagues.id))
+        .where(and(
+          eq(leagueMembers.userId, userId),
+          eq(leagueMembers.joinRequestKey, idempotencyKey)
+        ));
+      if (replayed) return { league: replayed.league, replayed: true };
+
+      const allocationKey = `cohort:${competitionKey}:${competition.seasonStartYear}:${startingRound}`;
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${allocationKey}))`);
+      if (timing.locksAt <= new Date()) throw new Error("ROUND_LOCKED");
+
+      await tx
+        .update(leagues)
+        .set({ locksAt: timing.locksAt })
+        .where(and(
+          eq(leagues.type, "competitive"),
+          eq(leagues.status, "upcoming"),
+          eq(leagues.competitionKey, competitionKey),
+          eq(leagues.seasonStartYear, competition.seasonStartYear),
+          eq(leagues.startingRound, startingRound)
+        ));
+
+      const candidates = await tx
+        .select()
+        .from(leagues)
+        .where(and(
+          eq(leagues.type, "competitive"),
+          eq(leagues.status, "upcoming"),
+          eq(leagues.competitionKey, competitionKey),
+          eq(leagues.seasonStartYear, competition.seasonStartYear),
+          eq(leagues.startingRound, startingRound)
+        ))
+        .orderBy(asc(leagues.instanceNumber));
+
+      const userMemberships = new Set((await tx
+        .select({ leagueId: leagueMembers.leagueId })
+        .from(leagueMembers)
+        .where(eq(leagueMembers.userId, userId))).map((row) => row.leagueId));
+
+      let league = null as typeof candidates[number] | null;
+      for (const candidate of candidates) {
+        if (userMemberships.has(candidate.id)) continue;
+        const [{ memberCount }] = await tx
+          .select({ memberCount: count() })
+          .from(leagueMembers)
+          .where(eq(leagueMembers.leagueId, candidate.id));
+        if (candidate.maxMembers === null || memberCount < candidate.maxMembers) {
+          league = candidate;
+          break;
+        }
+      }
+
+      if (!league) {
+        const [{ highestInstance }] = await tx
+          .select({ highestInstance: max(leagues.instanceNumber) })
+          .from(leagues)
+          .where(and(
+            eq(leagues.type, "competitive"),
+            eq(leagues.competitionKey, competitionKey),
+            eq(leagues.seasonStartYear, competition.seasonStartYear),
+            eq(leagues.startingRound, startingRound)
+          ));
+        const instanceNumber = (highestInstance ?? 0) + 1;
+        const seasonCode = String(competition.seasonStartYear).slice(-2);
+        const code = `${competition.providerCode}-${seasonCode}-R${startingRound}-${instanceNumber}`;
+        [league] = await tx
+          .insert(leagues)
+          .values({
+            code,
+            name: `${competition.name} Survivor`,
+            sport: competitionKey,
+            type: "competitive",
+            visibility: "public",
+            status: "upcoming",
+            competitionKey,
+            seasonStartYear: competition.seasonStartYear,
+            startingRound,
+            instanceNumber,
+            entryFeeChips: competition.competitiveEntryFeeChips,
+            maxMembers: competition.competitiveMaxMembers,
+            currentGameweek: startingRound,
+            locksAt: timing.locksAt,
+          })
+          .returning();
+      }
+
+      let balanceAfter: number | undefined;
+      if (league.entryFeeChips > 0) {
+        const chipResult = await applyChipTransactionInTransaction(tx, {
+          userId,
+          leagueId: league.id,
+          type: "league_entry",
+          amount: -league.entryFeeChips,
+          note: `Entry fee for ${league.name} (${league.code})`,
+        });
+        balanceAfter = chipResult.balanceAfter;
+      }
+
+      await tx.insert(leagueMembers).values({
+        leagueId: league.id,
+        userId,
+        status: "alive",
+        joinRequestKey: idempotencyKey,
+      });
+      await tx
+        .update(leagues)
+        .set({ vaultChips: sql`${leagues.vaultChips} + ${league.entryFeeChips}` })
+        .where(eq(leagues.id, league.id));
+
+      return { league, replayed: false, balanceAfter };
+    });
+
+    return res.status(result.replayed ? 200 : 201).json({
+      joined: true,
+      replayed: result.replayed,
+      balanceAfter: result.balanceAfter,
+      league: {
+        id: result.league.id,
+        code: result.league.code,
+        name: result.league.name,
+        competitionKey: result.league.competitionKey,
+        seasonStartYear: result.league.seasonStartYear,
+        startingRound: result.league.startingRound,
+        instanceNumber: result.league.instanceNumber,
+        locksAt: result.league.locksAt,
+      },
+    });
+  } catch (error) {
+    if (error instanceof InsufficientChipsError) {
+      return res.status(400).json({ error: "Not enough chips to cover the entry fee" });
+    }
+    if (error instanceof Error && error.message === "ROUND_LOCKED") {
+      return res.status(409).json({ error: "Entry for this round is locked" });
+    }
+    next(error);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/leagues — create a Friends League. Competitive cohorts are
+// created only when a player joins a real football competition.
 // ---------------------------------------------------------------------------
 
 leaguesRouter.post("/", async (req, res) => {
@@ -28,35 +354,27 @@ leaguesRouter.post("/", async (req, res) => {
   const input = parsed.data;
   const userId = req.userId as string;
 
-  if (input.type === "competitive" && input.entryTerms) {
-    // Entry terms are a Friends League concept only — competitive leagues
-    // use the standard chip entry fee, no free-text stakes description.
-    return res.status(400).json({ error: "entryTerms only applies to friends leagues" });
+  if (input.type === "competitive") {
+    return res.status(400).json({
+      error: "Competitive leagues are allocated automatically. Use POST /api/leagues/join-competition.",
+    });
   }
 
-  // Friends Leagues have neither an entry fee nor a member cap (25 Jul 2026
-  // decision) — force these regardless of what the client sent, rather
-  // than trusting client input for something this consequential.
-  // Competitive leagues require both (entry fee can be 0, but maxMembers
-  // must be set — defaults to 20 if not provided).
-  const entryFeeChips = input.type === "friends" ? 0 : (input.entryFeeChips ?? 0);
-  const maxMembers = input.type === "friends" ? null : (input.maxMembers ?? 20);
+  // Friends Leagues have neither an entry fee nor a member cap. Force these
+  // values server-side instead of trusting consequential client input.
+  const entryFeeChips = 0;
+  const maxMembers = null;
 
-  // Friends League names must be unique (case-insensitive) — decided 25 Jul 2026.
-  // Doesn't apply to competitive leagues, which intentionally reuse the same
-  // base name across many concurrent instances (distinguished by `code`).
-  if (input.type === "friends") {
-    const [nameClash] = await db
-      .select({ id: leagues.id })
-      .from(leagues)
-      .where(and(eq(leagues.type, "friends"), sql`lower(${leagues.name}) = lower(${input.name})`));
-    if (nameClash) {
-      return res.status(409).json({ error: "A friends league with this name already exists. Try a different name." });
-    }
+  const [nameClash] = await db
+    .select({ id: leagues.id })
+    .from(leagues)
+    .where(and(eq(leagues.type, "friends"), sql`lower(${leagues.name}) = lower(${input.name})`));
+  if (nameClash) {
+    return res.status(409).json({ error: "A friends league with this name already exists. Try a different name." });
   }
 
   const code = await generateLeagueCode(input.sport, input.type);
-  const inviteCode = input.type === "friends" ? await generateUniqueInviteCode() : null;
+  const inviteCode = await generateUniqueInviteCode();
 
   const [league] = await db
     .insert(leagues)
@@ -121,59 +439,28 @@ async function generateLeagueCode(sport: string, type: string): Promise<string> 
 }
 
 // ---------------------------------------------------------------------------
-// POST /api/leagues/:id/join — join a public league directly (no approval
-// needed for public competitive leagues; Friends Leagues use the separate
-// request-to-join flow in friendsLeagues.ts)
+// POST /api/leagues/:id/join — retained as a clear error for older clients.
+// Competitive joins allocate by competition; Friends joins use requests or
+// invite codes. Neither flow may bypass those rules with an internal ID.
 // ---------------------------------------------------------------------------
 
 leaguesRouter.post("/:id/join", async (req, res) => {
   const parsed = joinLeagueSchema.safeParse({ leagueId: req.params.id });
   if (!parsed.success) return res.status(400).json({ error: "Invalid league id" });
 
-  const userId = req.userId as string;
   const leagueId = parsed.data.leagueId;
 
   const [league] = await db.select().from(leagues).where(eq(leagues.id, leagueId));
   if (!league) return res.status(404).json({ error: "League not found" });
 
-  if (league.visibility === "invite_only") {
-    return res.status(403).json({
-      error: "This league requires a join request. Use POST /api/friends-leagues/:id/request instead.",
+  if (league.type === "competitive") {
+    return res.status(409).json({
+      error: "Join this competition through POST /api/leagues/join-competition so Knoxit can allocate a cohort.",
     });
   }
-  if (league.status !== "upcoming" && league.status !== "active") {
-    return res.status(400).json({ error: "League is not open for joining" });
-  }
-
-  // null maxMembers means uncapped (always true for Friends Leagues, per
-  // the 25 Jul 2026 "anyone around can join" decision) — skip the check.
-  if (league.maxMembers !== null) {
-    const [{ memberCount }] = await db
-      .select({ memberCount: count() })
-      .from(leagueMembers)
-      .where(eq(leagueMembers.leagueId, leagueId));
-
-    if (memberCount >= league.maxMembers) {
-      return res.status(400).json({ error: "League is full" });
-    }
-  }
-
-  const [existing] = await db
-    .select()
-    .from(leagueMembers)
-    .where(and(eq(leagueMembers.leagueId, leagueId), eq(leagueMembers.userId, userId)));
-  if (existing) return res.status(400).json({ error: "Already joined" });
-
-  try {
-    await joinLeagueInternal(leagueId, userId);
-  } catch (err) {
-    if (err instanceof InsufficientChipsError) {
-      return res.status(400).json({ error: "Not enough chips to cover the entry fee" });
-    }
-    throw err;
-  }
-
-  res.status(200).json({ joined: true });
+  return res.status(403).json({
+    error: "Friends Leagues require an invite code or an approved join request.",
+  });
 });
 
 /**

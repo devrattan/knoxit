@@ -6,12 +6,15 @@ import { sessionLoaded } from "./authSlice";
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const dispatch = useAppDispatch();
-  const { data, isError, isLoading } = useGetSessionQuery();
+  const { data, isError, isFetching, isLoading } = useGetSessionQuery();
 
   useEffect(() => {
-    if (isLoading) return;
+    // A login invalidates the cached session and triggers a background fetch.
+    // Do not overwrite the just-authenticated Redux state with the previous
+    // guest/error result while that request is still in flight.
+    if (isLoading || isFetching) return;
     dispatch(sessionLoaded(isError ? null : data?.user ?? null));
-  }, [data, dispatch, isError, isLoading]);
+  }, [data, dispatch, isError, isFetching, isLoading]);
 
   return <>{children}</>;
 }

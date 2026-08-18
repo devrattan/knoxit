@@ -1,81 +1,69 @@
-// artifacts/knoxit/src/pages/MyLeagues.tsx
 import { useState } from "react";
 import { useLocation } from "wouter";
-import { ChevronRight, Clock, CheckCircle2, XCircle, Radio, Shield, Trophy, Coins } from "lucide-react";
+import { ChevronRight, Clock, Coins, Shield, Trophy } from "lucide-react";
 import { Header } from "../components/Header";
 import { BottomNav } from "../components/BottomNav";
-import { activeLeagues, friendsLeagues, knockedOutLeagues, accentBorder } from "../services/mockData";
+import { type MyLeague, useGetLeaguesQuery } from "../services/api/knoxitApi";
 
-type League = {
-  id: number; code: string; name: string; gw: string; accent: string;
-  alive: number; joined: number; pick: string; backup: string;
-  status: string; statusIcon: string; statusColor: string; vault?: number;
+type Tab = "active" | "friends" | "knocked" | "won";
+
+const accentBorder: Record<string, string> = {
+  epl: "border-l-emerald-500",
+  la_liga: "border-l-violet-500",
+  bundesliga: "border-l-red-500",
+  ucl: "border-l-sky-500",
+  serie_a: "border-l-amber-500",
 };
 
-function StatusIcon({ type, color }: { type: string; color: string }) {
-  const cls = { emerald: "text-emerald-400", violet: "text-violet-400", red: "text-red-400" }[color as "emerald" | "violet" | "red"];
-  if (type === "check") return <CheckCircle2 size={13} className={cls} />;
-  if (type === "clock") return <Clock size={13} className={cls} />;
-  if (type === "live") return <Radio size={13} className={cls} />;
-  if (type === "x") return <XCircle size={13} className={cls} />;
-  return null;
+function lockLabel(league: MyLeague) {
+  if (league.status === "active") return "IN PROGRESS";
+  if (league.status === "completed") return "COMPLETED";
+  if (league.status === "split") return "VAULT SPLIT";
+  if (!league.locksAt) return "UPCOMING";
+  const minutes = Math.ceil((new Date(league.locksAt).getTime() - Date.now()) / 60_000);
+  if (minutes <= 0) return "LOCKED";
+  if (minutes < 60) return `LOCKS IN ${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  return hours < 24 ? `LOCKS IN ${hours}h ${minutes % 60}m` : `LOCKS IN ${Math.floor(hours / 24)}d ${hours % 24}h`;
 }
 
-function LeagueCard({ l, isFriends }: { l: League; isFriends?: boolean }) {
+function LeagueCard({ league }: { league: MyLeague }) {
   const [, setLocation] = useLocation();
-  const statusColorText = { emerald: "text-emerald-400", violet: "text-violet-400", red: "text-red-400" }[l.statusColor as "emerald" | "violet" | "red"];
+  const friends = league.type === "friends";
+  const border = friends ? "border-l-violet-500" : (accentBorder[league.competitionKey ?? ""] ?? "border-l-emerald-500");
 
   return (
     <button
-      onClick={() => setLocation(`/leagues/${l.id}`)}
-      className={`w-full text-left bg-white/[0.03] border border-white/5 border-l-[3px] ${accentBorder[l.accent]} rounded-xl p-3`}
+      onClick={() => setLocation(`/leagues/${league.id}`)}
+      className={`w-full rounded-xl border border-white/5 border-l-[3px] ${border} bg-white/[0.03] p-3 text-left`}
     >
-      <div className="flex items-start justify-between mb-1.5">
-        <div className="flex items-center gap-2">
-          <div className="w-9 h-9 rounded-full bg-zinc-800 border border-white/10 flex items-center justify-center text-[9px] font-bold text-zinc-300 shrink-0">
-            {l.name.split(" ")[0].slice(0, 2).toUpperCase()}
+      <div className="flex items-start justify-between">
+        <div className="flex min-w-0 items-center gap-2">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-zinc-800 text-[9px] font-bold text-zinc-300">
+            {league.name.split(" ")[0].slice(0, 2).toUpperCase()}
           </div>
-          <div>
+          <div className="min-w-0">
             <div className="flex items-center gap-1.5">
-              <span className="text-white text-[13px] font-semibold leading-tight">{l.name}</span>
-              <span className="text-[9px] font-bold text-zinc-400 bg-white/5 border border-white/10 rounded px-1 py-0.5">{l.code}</span>
-              {isFriends && (
-                <span className="text-[9px] font-bold text-violet-300 bg-violet-500/15 border border-violet-500/30 rounded px-1 py-0.5">Friends</span>
-              )}
+              <span className="truncate text-[13px] font-semibold leading-tight text-white">{league.name}</span>
+              <span className="shrink-0 rounded border border-white/10 bg-white/5 px-1 py-0.5 text-[9px] font-bold text-zinc-400">{league.code}</span>
             </div>
-            <div className="text-zinc-500 text-[10px] mt-0.5">{l.gw}</div>
+            <div className="mt-0.5 text-[10px] text-zinc-500">
+              {friends ? "Friends League" : `Started GW${league.startingRound ?? league.currentGameweek}`}
+            </div>
           </div>
         </div>
-        <div className="flex flex-col items-end gap-1">
-          {l.vault !== undefined && (
-            <span className="flex items-center gap-1 text-[10px] font-bold text-amber-400 bg-amber-500/10 border border-amber-500/25 rounded-md px-1.5 py-0.5">
-              <Coins size={9} /> {l.vault.toLocaleString()}
-            </span>
-          )}
-          <ChevronRight size={16} className="text-zinc-600" />
-        </div>
+        <ChevronRight size={16} className="shrink-0 text-zinc-600" />
       </div>
 
-      <div className="text-zinc-400 text-[11px] mb-2 pl-11">
-        <span className="text-emerald-400 font-medium">{l.alive} still alive</span>
-        <span className="mx-1">•</span>
-        <span>{l.joined} joined</span>
-      </div>
-
-      <div className="flex items-center justify-between pl-11">
-        <div className="flex gap-1.5">
-          <span className="text-[10px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30 rounded-md px-2 py-1">
-            Pick: {l.pick}
+      <div className="mt-2 flex items-center justify-between pl-11">
+        <span className={`flex items-center gap-1 text-[10px] font-semibold ${league.memberStatus === "knocked_out" ? "text-red-400" : "text-emerald-400"}`}>
+          <Clock size={11} /> {league.memberStatus === "knocked_out" ? "KNOCKED OUT" : lockLabel(league)}
+        </span>
+        {!friends ? (
+          <span className="flex items-center gap-1 rounded-md border border-amber-500/25 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-bold text-amber-400">
+            <Coins size={9} /> {league.vaultChips.toLocaleString()}
           </span>
-          <span className="text-[10px] font-medium bg-white/[0.03] text-zinc-400 border border-white/10 rounded-md px-2 py-1">
-            Backup: {l.backup}
-          </span>
-        </div>
-      </div>
-
-      <div className={`flex items-center gap-1 mt-2 pl-11 text-[11px] font-semibold ${statusColorText}`}>
-        <StatusIcon type={l.statusIcon} color={l.statusColor} />
-        {l.status}
+        ) : null}
       </div>
     </button>
   );
@@ -83,14 +71,20 @@ function LeagueCard({ l, isFriends }: { l: League; isFriends?: boolean }) {
 
 export default function MyLeagues() {
   const [, setLocation] = useLocation();
-  const [tab, setTab] = useState<"active" | "friends" | "live" | "knocked" | "won">("active");
-
-  const tabs = [
-    { key: "active" as const, label: "ACTIVE", count: activeLeagues.length },
-    { key: "friends" as const, label: "FRIENDS", count: friendsLeagues.length },
-    { key: "live" as const, label: "LIVE", count: 1 },
-    { key: "knocked" as const, label: "KNOCKED OUT", count: null },
-    { key: "won" as const, label: "WON VAULTS", count: 0 },
+  const [tab, setTab] = useState<Tab>("active");
+  const leaguesQuery = useGetLeaguesQuery();
+  const leagues = leaguesQuery.data ?? [];
+  const byTab: Record<Tab, MyLeague[]> = {
+    active: leagues.filter((league) => league.type === "competitive" && league.memberStatus === "alive" && league.status !== "completed" && league.status !== "split"),
+    friends: leagues.filter((league) => league.type === "friends"),
+    knocked: leagues.filter((league) => league.memberStatus === "knocked_out"),
+    won: leagues.filter((league) => league.memberStatus === "alive" && (league.status === "completed" || league.status === "split")),
+  };
+  const tabs: Array<{ key: Tab; label: string }> = [
+    { key: "active", label: "ACTIVE" },
+    { key: "friends", label: "FRIENDS" },
+    { key: "knocked", label: "KNOCKED OUT" },
+    { key: "won", label: "WON VAULTS" },
   ];
 
   return (
@@ -101,44 +95,38 @@ export default function MyLeagues() {
         <div className="text-zinc-500 text-[12px] mt-0.5">Your survival battles</div>
       </div>
 
-      <div className="flex gap-4 px-4 mt-4 border-b border-white/5">
-        {tabs.map((t) => (
+      <div className="flex gap-4 overflow-x-auto px-4 mt-4 border-b border-white/5 no-scrollbar">
+        {tabs.map((item) => (
           <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={`pb-2.5 text-[11px] font-bold tracking-wide border-b-2 -mb-px whitespace-nowrap ${
-              tab === t.key ? "border-emerald-400 text-emerald-400" : "border-transparent text-zinc-500"
-            }`}
+            key={item.key}
+            onClick={() => setTab(item.key)}
+            className={`pb-2.5 text-[11px] font-bold tracking-wide border-b-2 -mb-px whitespace-nowrap ${tab === item.key ? "border-emerald-400 text-emerald-400" : "border-transparent text-zinc-500"}`}
           >
-            {t.label}{t.count !== null ? ` (${t.count})` : ""}
+            {item.label} ({byTab[item.key].length})
           </button>
         ))}
       </div>
 
       <div className="flex-1 overflow-y-auto no-scrollbar px-4 pt-3">
-        {tab === "active" && (
-          <div className="space-y-2.5">
-            {activeLeagues.map((l) => <LeagueCard key={l.id} l={l} />)}
+        {leaguesQuery.isLoading ? <div className="pt-16 text-center text-[12px] text-zinc-500">Loading your leagues…</div> : null}
+        {leaguesQuery.isError ? (
+          <div className="pt-12 text-center">
+            <div className="text-[12px] text-red-300">Could not load your leagues.</div>
+            <button onClick={() => leaguesQuery.refetch()} className="mt-3 rounded-lg border border-white/10 px-3 py-2 text-[11px] text-zinc-300">Try again</button>
           </div>
-        )}
-        {tab === "friends" && (
-          <div className="space-y-2.5">
-            {friendsLeagues.map((l) => <LeagueCard key={l.id} l={l} isFriends />)}
-          </div>
-        )}
-        {tab === "knocked" && (
-          <div className="space-y-2.5">
-            {knockedOutLeagues.map((l) => <LeagueCard key={l.id} l={l} />)}
-          </div>
-        )}
-        {(tab === "live" || tab === "won") && (
+        ) : null}
+
+        {leaguesQuery.isSuccess && byTab[tab].length ? (
+          <div className="space-y-2.5">{byTab[tab].map((league) => <LeagueCard key={league.id} league={league} />)}</div>
+        ) : null}
+        {leaguesQuery.isSuccess && byTab[tab].length === 0 ? (
           <div className="flex flex-col items-center justify-center pt-16 text-center">
             <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center mb-3">
               <Trophy size={20} className="text-zinc-600" />
             </div>
             <div className="text-zinc-500 text-[12px]">Nothing here yet</div>
           </div>
-        )}
+        ) : null}
 
         <div className="mt-4 mb-4 bg-emerald-500/[0.06] border border-emerald-500/20 rounded-xl px-3 py-3 flex items-center gap-3">
           <div className="w-9 h-9 rounded-lg bg-emerald-500/15 flex items-center justify-center shrink-0">
@@ -149,10 +137,7 @@ export default function MyLeagues() {
             <div className="text-zinc-500 text-[10px] mt-0.5">Survive each Gameweek to unlock the vault.</div>
           </div>
         </div>
-        <button
-          onClick={() => setLocation("/leagues/explore")}
-          className="w-full mb-4 text-emerald-400 text-[12px] font-bold border border-emerald-500/30 rounded-xl py-2.5"
-        >
+        <button onClick={() => setLocation("/leagues/explore")} className="w-full mb-4 text-emerald-400 text-[12px] font-bold border border-emerald-500/30 rounded-xl py-2.5">
           Explore Leagues
         </button>
       </div>

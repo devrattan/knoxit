@@ -20,6 +20,16 @@ type ChipTransactionType =
   | "referral_bonus"
   | "admin_adjustment";
 
+type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+type ChipTransactionParams = {
+  userId: string;
+  leagueId?: string | null;
+  type: ChipTransactionType;
+  amount: number;
+  note?: string;
+};
+
 export class InsufficientChipsError extends Error {
   constructor() {
     super("Insufficient chip balance");
@@ -34,43 +44,46 @@ export class InsufficientChipsError extends Error {
  *
  * Throws InsufficientChipsError if a debit would take the balance below zero.
  */
-export async function applyChipTransaction(params: {
-  userId: string;
-  leagueId?: string | null;
-  type: ChipTransactionType;
-  amount: number;
-  note?: string;
-}) {
+export async function applyChipTransaction(params: ChipTransactionParams) {
+  return db.transaction((tx) => applyChipTransactionInTransaction(tx, params));
+}
+
+/**
+ * Transaction-aware variant for workflows (such as league joining) that
+ * need the balance, ledger, membership and vault changes to commit together.
+ */
+export async function applyChipTransactionInTransaction(
+  tx: DbTransaction,
+  params: ChipTransactionParams
+) {
   const { userId, leagueId = null, type, amount, note } = params;
 
-  return db.transaction(async (tx) => {
-    const [user] = await tx
-      .select({ chipBalance: users.chipBalance })
-      .from(users)
-      .where(eq(users.id, userId))
-      .for("update"); // row lock to prevent race conditions on concurrent spends
+  const [user] = await tx
+    .select({ chipBalance: users.chipBalance })
+    .from(users)
+    .where(eq(users.id, userId))
+    .for("update"); // row lock to prevent race conditions on concurrent spends
 
-    if (!user) throw new Error(`User ${userId} not found`);
+  if (!user) throw new Error(`User ${userId} not found`);
 
-    const newBalance = user.chipBalance + amount;
-    if (newBalance < 0) throw new InsufficientChipsError();
+  const newBalance = user.chipBalance + amount;
+  if (newBalance < 0) throw new InsufficientChipsError();
 
-    await tx.update(users).set({ chipBalance: newBalance }).where(eq(users.id, userId));
+  await tx.update(users).set({ chipBalance: newBalance }).where(eq(users.id, userId));
 
-    const [ledgerRow] = await tx
-      .insert(chipLedger)
-      .values({
-        userId,
-        leagueId,
-        type,
-        amount,
-        balanceAfter: newBalance,
-        note: note ?? null,
-      })
-      .returning();
+  const [ledgerRow] = await tx
+    .insert(chipLedger)
+    .values({
+      userId,
+      leagueId,
+      type,
+      amount,
+      balanceAfter: newBalance,
+      note: note ?? null,
+    })
+    .returning();
 
-    return { balanceAfter: newBalance, ledgerRow };
-  });
+  return { balanceAfter: newBalance, ledgerRow };
 }
 
 export async function getChipBalance(userId: string): Promise<number> {

@@ -1,0 +1,107 @@
+# Knoxit October 5 Closed Beta Scope
+
+Saved from the planning session on 18 August 2026.
+
+## Scope commitment
+
+- Deadline: 5 October 2026
+- Included tasks: 38 of 112
+- Deferred tasks: 74 of 112
+- Scope reduction: 66.1%
+- Release type: closed beta with beta chips; no purchases or cash withdrawals
+
+Included task numbers:
+
+`#2, #3, #11-16, #18, #21, #22, #24, #42, #45-53, #59, #62, #67, #68, #79-82, #89-91, #104, #109-112`
+
+## End-to-end journey
+
+```text
+Open app
+  -> Sign up or log in
+  -> Receive and display beta chip balance
+  -> Discover an available league
+  -> Review its entry fee and join
+  -> Deduct chips and create membership atomically
+  -> Open the correct League Detail
+  -> Show Take Action when a pick is required
+  -> Select eligible primary and backup teams
+  -> Review and submit reliably
+  -> Allow editing until the server-controlled lock
+  -> Synchronize fixtures and final results
+  -> Evaluate primary, then backup when required
+  -> Persist the active or knocked-out outcome
+```
+
+## Account and session
+
+- #11 creates exactly one account and a beta-chip wallet.
+- #12 rejects an existing email with a clear error.
+- #13 enforces password rules in the client and server.
+- #14 authenticates correct credentials.
+- #15 restores a valid session after close/reopen.
+- #16 invalidates the session and clears private UI state on logout.
+- #18 redirects expired sessions to login.
+- #91 returns consistent 401/403 responses for protected APIs.
+
+New beta accounts receive a fixed starting allocation (recommended: 1,000 chips). Forgot password (#17) is deferred and must not be presented as working.
+
+## Chips and league entry
+
+- #68 uses one server-authoritative wallet balance everywhere.
+- #2 provides the joinable-league carousel and a working Join Now action.
+- #22 provides the complete joinable-league list.
+- #3 blocks entry when balance is below the fee and shows required and available chips.
+
+Joining must use one database transaction to create membership, debit the wallet, and add a ledger entry. An idempotency key prevents duplicate membership or double deduction. Failed enrollment must not deduct chips. For the beta, chips come only from the initial allocation or an administrator; rewards, purchases, boosters, coupons, cash prizes, and withdrawals are deferred.
+
+## League and pick flow
+
+- #21 opens the selected league.
+- #24 displays accurate league information and the live server-derived countdown.
+- #42 shows Take Action only for an active member with no submitted pick before lock.
+- #45 blocks a previously used primary team on the server.
+- #46 applies the same rule to the backup and prevents backup = primary.
+- #47 displays both selections before confirmation.
+- #48 changes the league/pick status to Submitted after success.
+- #49 permits editing before lock and rejects it after lock on the server.
+- #50 applies the no-pick-at-lock policy.
+- #51 uses an authoritative UTC lock timestamp across time zones and DST.
+- #52 makes submission idempotent under double taps and retries.
+- #53 verifies the server result after a network failure instead of silently losing a pick.
+
+Recommended beta policy for #50: no valid pick at gameweek lock means automatic elimination, recorded as `NO_PICK_SUBMITTED`.
+
+## Fixtures and results
+
+- #59 loads fixtures for the selected league.
+- #62 displays kickoff times in the user's local timezone.
+- #67 reflects postponed/rescheduled fixtures and adjusts applicable timers.
+- #110 verifies synchronization of the live gameweek before kickoff.
+- #79 evaluates the backup when the primary fails.
+- #80 eliminates the user only when both applicable picks fail.
+- #81 defines one gameweek-level UTC lock for simultaneous kickoffs in the beta.
+- #82 makes the committed outcome stable across retries, refreshes, and relogins.
+
+For a fixture postponed after lock, picks remain locked and the outcome stays pending until the fixture is resolved; the pick window is not silently reopened.
+
+## Security and release readiness
+
+- #89 is implemented as API/database authorization isolation for Drizzle/Neon rather than Supabase-specific RLS.
+- #90 keeps the football-data API key server-side.
+- #104 publishes and links Terms and Privacy.
+- #109 runs the smoke path: fresh install -> signup -> chips -> join -> submit -> simulated result -> confirmed outcome.
+- #111 confirms monitoring receives client and server failures.
+- #112 documents and tests rollback.
+
+## Explicitly deferred experiences
+
+- Forgot-password recovery
+- Action Center aggregation
+- Chat, direct messages, opponent profiles, and comparisons
+- Daily chip rewards, purchases, offers, boosters, and coupons
+- Cash prizes, payout, KYC, and country eligibility
+- Notifications
+- Advanced statistics and history
+- Broad performance, device, and accessibility certification
+

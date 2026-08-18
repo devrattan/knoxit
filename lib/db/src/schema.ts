@@ -108,6 +108,11 @@ export const footballCompetitions = pgTable("football_competitions", {
   emblem: text("emblem"),
   seasonStartYear: integer("season_start_year"),
   currentMatchday: integer("current_matchday"),
+  // Product settings live beside provider metadata so fixture syncs can
+  // update the season without changing how Knoxit runs its survivor pools.
+  competitiveEntryFeeChips: integer("competitive_entry_fee_chips").notNull().default(0),
+  competitiveMaxMembers: integer("competitive_max_members").notNull().default(20),
+  competitiveEnabled: boolean("competitive_enabled").notNull().default(true),
   lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -196,6 +201,14 @@ export const leagues = pgTable("leagues", {
 
   createdBy: uuid("created_by").references(() => users.id),
 
+  // Competitive leagues are automatically-created cohorts for one real
+  // competition, season and starting round. Friends Leagues leave these
+  // fields null. `instanceNumber` is the user-invisible PL-1/PL-2 split.
+  competitionKey: text("competition_key").references(() => footballCompetitions.key),
+  seasonStartYear: integer("season_start_year"),
+  startingRound: integer("starting_round"),
+  instanceNumber: integer("instance_number"),
+
   // Chip economy — entry fee is always chip-denominated this season.
   // Friends Leagues have NEITHER an entry fee nor a vault (25 Jul 2026
   // decision) — any prize arrangement is described in `entryTerms` and
@@ -227,6 +240,11 @@ export const leagues = pgTable("leagues", {
   friendsNameUnique: uniqueIndex("friends_league_name_unique")
     .on(sql`lower(${table.name})`)
     .where(sql`${table.type} = 'friends'`),
+  competitiveCohortUnique: uniqueIndex("competitive_league_cohort_unique")
+    .on(table.competitionKey, table.seasonStartYear, table.startingRound, table.instanceNumber)
+    .where(sql`${table.type} = 'competitive'`),
+  competitiveCohortLookup: index("competitive_league_cohort_lookup_idx")
+    .on(table.competitionKey, table.seasonStartYear, table.startingRound, table.status),
 }));
 
 // NOTE ON NAME UNIQUENESS (25 Jul 2026 decision):
@@ -259,6 +277,9 @@ export const leagueMembers = pgTable(
     status: memberStatusEnum("status").notNull().default("alive"),
     joinedAt: timestamp("joined_at", { withTimezone: true }).notNull().defaultNow(),
     knockedOutAtGameweek: integer("knocked_out_at_gameweek"),
+    // A client-generated UUID makes a retried join safe while still allowing
+    // a deliberate second entry into another cohort with a fresh UUID.
+    joinRequestKey: text("join_request_key"),
 
     // Friends League co-admin delegation (25 Jul 2026 decision): the
     // original creator can promote trusted members to also approve/decline
@@ -270,6 +291,9 @@ export const leagueMembers = pgTable(
   },
   (table) => ({
     pk: primaryKey({ columns: [table.leagueId, table.userId] }),
+    joinRequestUnique: uniqueIndex("league_member_join_request_unique")
+      .on(table.userId, table.joinRequestKey)
+      .where(sql`${table.joinRequestKey} is not null`),
   })
 );
 
@@ -423,6 +447,7 @@ export const leaguesRelations = relations(leagues, ({ many, one }) => ({
   joinRequests: many(joinRequests),
   splitVotes: many(splitVotes),
   creator: one(users, { fields: [leagues.createdBy], references: [users.id] }),
+  competition: one(footballCompetitions, { fields: [leagues.competitionKey], references: [footballCompetitions.key] }),
 }));
 
 export const leagueMembersRelations = relations(leagueMembers, ({ one }) => ({
