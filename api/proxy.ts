@@ -35,6 +35,16 @@ function getBackendOrigin() {
   }
 }
 
+function getUpstreamUrl(requestUrl: string | undefined, backendOrigin: string) {
+  const incomingUrl = new URL(requestUrl ?? "/api/proxy", "http://knoxit.local");
+  const proxyPath = incomingUrl.searchParams.get("__proxy_path");
+  if (!proxyPath) return undefined;
+
+  incomingUrl.searchParams.delete("__proxy_path");
+  const query = incomingUrl.searchParams.toString();
+  return new URL(`/api/${proxyPath}${query ? `?${query}` : ""}`, backendOrigin);
+}
+
 export default async function handler(request: IncomingMessage, response: ServerResponse) {
   const backendOrigin = getBackendOrigin();
   if (!backendOrigin) {
@@ -44,9 +54,15 @@ export default async function handler(request: IncomingMessage, response: Server
     return;
   }
 
+  const upstreamUrl = getUpstreamUrl(request.url, backendOrigin);
+  if (!upstreamUrl) {
+    response.statusCode = 404;
+    response.setHeader("Content-Type", "application/json; charset=utf-8");
+    response.end(JSON.stringify({ error: "API route not found" }));
+    return;
+  }
+
   try {
-    const incomingUrl = new URL(request.url ?? "/api", "http://knoxit.local");
-    const upstreamUrl = new URL(`${incomingUrl.pathname}${incomingUrl.search}`, backendOrigin);
     const headers = new Headers();
 
     for (const [name, value] of Object.entries(request.headers)) {

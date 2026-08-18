@@ -41,8 +41,9 @@ Keep the frontend and backend in this repository. `src/` is the Vite web app,
 `server/` is the Express API, and `lib/` contains shared database/API contracts.
 They can still be deployed as two services from the same repository.
 
-The current Vercel deployment serves the Vite frontend and proxies `/api`
-through `api/[...path].ts` to the Node backend. Deploy `server/` to a
+The current Vercel deployment serves the Vite frontend and explicitly rewrites
+`/api/*` through `api/proxy.ts` to the Node backend before applying the SPA
+fallback. Deploy `server/` to a
 Node-compatible service, set its `DATABASE_URL` to Neon, and set Vercel's
 `BACKEND_ORIGIN` to that API origin. Keep `VITE_API_BASE_URL` empty so browser
 requests and the session cookie stay on the frontend origin. Cross-origin
